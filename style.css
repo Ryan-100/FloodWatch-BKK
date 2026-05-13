@@ -79,3 +79,20 @@ input:checked + .slider:before { transform: translateX(16px) }
 
 /* Disable district polygon pointer events when Risk Points tab is active */
 .points-tab-active path.district-polygon { pointer-events: none !important; }
+
+/* Citizen Report Dots Animation */
+@keyframes citizen-pulse {
+  0% { stroke-width: 1px; stroke-opacity: 1; }
+  100% { stroke-width: 20px; stroke-opacity: 0; }
+}
+.citizen-report-dot {
+  animation: citizen-pulse 2s infinite;
+  stroke: #ef4444;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.4; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+

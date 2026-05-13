@@ -7,7 +7,8 @@ let pointsLayer = null, pointFeatures = [];
 let canvasRenderer = null;
 let currentTab = 'map';
 let spatialIndex = null;
-let districtsVisible = true, roadsVisible = true, allRoadsVisible = false;
+let districtsVisible = true, roadsVisible = true, allRoadsVisible = false, reportsVisible = true;
+let reportsLayer = null;
 let currentHour = 0, isArchiveMode = false, selectedPoint = null;
 const BKK = { lat: 13.7563, lon: 100.5018 };
 const LAT_STEP = 0.055556, LON_STEP = 0.066667;
@@ -24,6 +25,11 @@ async function initMap() {
   
   await fetchDistricts();
   await fetchRoads();
+  
+  reportsLayer = L.layerGroup().addTo(map);
+  fetchAndRenderReports();
+  setInterval(fetchAndRenderReports, 30000);
+  
   addMapControls();
 }
 
@@ -212,6 +218,7 @@ function addMapControls() {
       <button id="tog-dist" class="map-toggle-btn active" onclick="toggleLayer('dist')">Districts</button>
       <button id="tog-roads" class="map-toggle-btn active" onclick="toggleLayer('roads')">Roads</button>
       <button id="tog-all-roads" class="map-toggle-btn" onclick="toggleLayer('all-roads')">All Roads</button>
+      <button id="tog-reports" class="map-toggle-btn active" onclick="toggleLayer('reports')">Reports</button>
     `;
     L.DomEvent.disableClickPropagation(div);
     return div;
@@ -248,7 +255,38 @@ function toggleLayer(type) {
     const btn = document.getElementById('tog-all-roads');
     btn.style.backgroundColor = allRoadsVisible ? '#1D4ED8' : '#ffffff';
     btn.style.color = allRoadsVisible ? '#ffffff' : '#444444';
+  } else if (type === 'reports') {
+    if (!reportsLayer) return;
+    const has = map.hasLayer(reportsLayer);
+    has ? map.removeLayer(reportsLayer) : map.addLayer(reportsLayer);
+    reportsVisible = !has;
+    const btn = document.getElementById('tog-reports');
+    btn.style.backgroundColor = reportsVisible ? '#1D4ED8' : '#ffffff';
+    btn.style.color = reportsVisible ? '#ffffff' : '#444444';
   }
+}
+
+async function fetchAndRenderReports() {
+  if (!reportsLayer) return;
+  try {
+    const resp = await fetch('/api/reports');
+    const data = await resp.json();
+    reportsLayer.clearLayers();
+    
+    // Only show verified + pending/dispatched reports on main map
+    data.filter(r => r.reliability === 'verified' && r.status !== 'spam' && r.status !== 'resolved').forEach(r => {
+      const marker = L.circleMarker([r.lat, r.lon], {
+        radius: 6,
+        fillColor: '#ef4444',
+        color: '#fff',
+        weight: 1,
+        fillOpacity: 0.8,
+        className: 'citizen-report-dot'
+      });
+      marker.bindTooltip(`Citizen Report: ${r.severity.replace('_',' ')}`, { sticky: true });
+      marker.addTo(reportsLayer);
+    });
+  } catch (e) { console.warn("Failed to fetch reports for main map", e); }
 }
 
 function setToday() {
@@ -404,6 +442,7 @@ async function fetchAndPredict() {
     document.getElementById('s-hour').max = weatherCache.time.length - 1;
     document.getElementById('s-hour').value = currentHour;
     await renderForHour();
+    refreshReportMarkers();
     let statusHTML = '<span class="sd sd-green"></span>' + (isArchiveMode ? 'Archive: ' : 'Live: ') + dateStr;
     if (predictions) {
       const zeroElevCount = predictions.filter(p => p.elevation_m === 0 || p.elevation_m === 0.0).length;
@@ -768,11 +807,269 @@ function switchTab(tabId) {
   }
 }
 
+// ─── REPORT DIALOG ──────────────────────────────────────────────
+let reportLat = null, reportLon = null, reportSeverity = null, reportMap = null;
+
+function openReportDialog() {
+  const overlay = document.getElementById('report-overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('report-success').style.display = 'none';
+  document.getElementById('submit-btn').style.display = 'block';
+  document.getElementById('report-error').style.display = 'none';
+  // Init mini map inside dialog
+  setTimeout(() => {
+    if (reportMap) { reportMap.remove(); reportMap = null; }
+    reportMap = L.map('report-map').setView([13.7563, 100.5018], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(reportMap);
+    // Try GPS
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        reportLat = pos.coords.latitude;
+        reportLon = pos.coords.longitude;
+        reportMap.setView([reportLat, reportLon], 15);
+        const marker = L.marker([reportLat, reportLon], { draggable: true }).addTo(reportMap);
+        marker.on('dragend', e => {
+          reportLat = e.target.getLatLng().lat;
+          reportLon = e.target.getLatLng().lng;
+        });
+        document.getElementById('location-status').textContent = `📍 ${reportLat.toFixed(5)}, ${reportLon.toFixed(5)}`;
+      }, () => {
+        reportLat = 13.7563; reportLon = 100.5018;
+        document.getElementById('location-status').textContent = '⚠ GPS unavailable — drag pin to your location';
+        const marker = L.marker([reportLat, reportLon], { draggable: true }).addTo(reportMap);
+        marker.on('dragend', e => {
+          reportLat = e.target.getLatLng().lat;
+          reportLon = e.target.getLatLng().lng;
+          document.getElementById('location-status').textContent = `📍 ${reportLat.toFixed(5)}, ${reportLon.toFixed(5)}`;
+        });
+      });
+    }
+  }, 100);
+}
+
+function closeReportDialog() {
+  document.getElementById('report-overlay').style.display = 'none';
+  reportSeverity = null;
+  document.querySelectorAll('.sev-btn').forEach(b => b.style.borderColor = '#e5e7eb');
+  document.getElementById('report-desc').value = '';
+  document.getElementById('report-photo').value = '';
+  document.getElementById('photo-preview').style.display = 'none';
+}
+
+function selectSeverity(btn) {
+  document.querySelectorAll('.sev-btn').forEach(b => {
+    b.style.borderColor = '#e5e7eb';
+    b.style.background = 'white';
+  });
+  btn.style.borderColor = '#1D4ED8';
+  btn.style.background = '#eff6ff';
+  reportSeverity = btn.dataset.sev;
+}
+
+function previewPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = document.getElementById('photo-preview');
+    img.src = e.target.result;
+    img.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function submitReport() {
+  const errEl = document.getElementById('report-error');
+  errEl.style.display = 'none';
+  if (!reportLat || !reportLon) {
+    errEl.textContent = 'Please allow location access or drag the pin to your location.';
+    errEl.style.display = 'block'; return;
+  }
+  if (!reportSeverity) {
+    errEl.textContent = 'Please select a flood severity level.';
+    errEl.style.display = 'block'; return;
+  }
+  const photoInput = document.getElementById('report-photo');
+  let photoData = null;
+  if (photoInput.files[0]) {
+    photoData = await new Promise(res => {
+      const r = new FileReader();
+      r.onload = e => res(e.target.result);
+      r.readAsDataURL(photoInput.files[0]);
+    });
+  }
+  const btn = document.getElementById('submit-btn');
+  btn.textContent = 'Submitting...';
+  btn.disabled = true;
+  try {
+    const resp = await fetch('/api/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lat: reportLat, lon: reportLon,
+        severity: reportSeverity,
+        description: document.getElementById('report-desc').value,
+        photo: photoData
+      })
+    });
+    const result = await resp.json();
+    document.getElementById('submit-btn').style.display = 'none';
+    document.getElementById('report-success').style.display = 'block';
+    document.getElementById('success-detail').textContent =
+      `Report ID: ${result.report_id} · Status: ${result.reliability === 'verified' ? '✓ Verified' : result.reliability === 'suspicious' ? '⚠ Under review' : 'Received'}`;
+    refreshReportMarkers();
+  } catch(e) {
+    errEl.textContent = 'Submission failed. Is the server running?';
+    errEl.style.display = 'block';
+    btn.textContent = 'Submit Report';
+    btn.disabled = false;
+  }
+}
+
+// ─── ADMIN PANEL ────────────────────────────────────────────────
+let allReports = [], currentFilter = 'all';
+
+async function openAdminPanel() {
+  document.getElementById('admin-overlay').style.display = 'flex';
+  await loadAdminReports();
+}
+
+function closeAdminPanel() {
+  document.getElementById('admin-overlay').style.display = 'none';
+}
+
+async function loadAdminReports() {
+  const resp = await fetch('/api/reports');
+  allReports = await resp.json();
+  allReports.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  renderAdminStats();
+  renderAdminFeed(currentFilter);
+}
+
+function renderAdminStats() {
+  const total = allReports.length;
+  const pending = allReports.filter(r => r.status === 'pending').length;
+  const dispatched = allReports.filter(r => r.status === 'dispatched').length;
+  const verified = allReports.filter(r => r.reliability === 'verified').length;
+  const statsEl = document.getElementById('admin-stats');
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <span style="background:#f3f4f6;padding:4px 10px;border-radius:20px"><b>${total}</b> Total</span>
+      <span style="background:#fef3c7;padding:4px 10px;border-radius:20px"><b>${pending}</b> Pending</span>
+      <span style="background:#dbeafe;padding:4px 10px;border-radius:20px"><b>${dispatched}</b> Dispatched</span>
+      <span style="background:#dcfce7;padding:4px 10px;border-radius:20px"><b>${verified}</b> Verified</span>
+    `;
+  }
+}
+
+function renderAdminFeed(filter) {
+  const filtered = filter === 'all' ? allReports : allReports.filter(r => r.status === filter);
+  const sevColors = { ankle_deep:'#facc15', knee_deep:'#f97316', vehicle_submerged:'#ef4444', road_blocked:'#7c3aed' };
+  const sevLabels = { ankle_deep:'Ankle-deep', knee_deep:'Knee-deep', vehicle_submerged:'Vehicle submerged', road_blocked:'Road blocked' };
+  const statusColors = { pending:'#fef3c7', dispatched:'#dbeafe', resolved:'#dcfce7', spam:'#f3f4f6' };
+  const feedEl = document.getElementById('admin-feed');
+  if (feedEl) {
+    feedEl.innerHTML = filtered.length === 0
+      ? '<div style="text-align:center;color:#9ca3af;padding:40px;font-size:13px">No reports found</div>'
+      : filtered.map(r => `
+        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer" onclick="adminSelectReport('${r.id}')">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:10px;height:10px;border-radius:50%;background:${sevColors[r.severity]||'#9ca3af'};display:inline-block"></span>
+              <span style="font-size:12px;font-weight:600">${sevLabels[r.severity]||r.severity}</span>
+              <span style="font-size:11px;color:#6b7280">${r.id}</span>
+            </div>
+            <span style="font-size:11px;padding:2px 8px;border-radius:20px;background:${statusColors[r.status]||'#f3f4f6'}">${r.status}</span>
+          </div>
+          <div style="font-size:11px;color:#6b7280;margin-bottom:4px">📍 ${r.lat?.toFixed(4)}, ${r.lon?.toFixed(4)} · ${new Date(r.timestamp).toLocaleTimeString()}</div>
+          ${r.description ? `<div style="font-size:12px;color:#374151;margin-bottom:6px">${r.description}</div>` : ''}
+          <div style="display:flex;gap:6px;margin-top:8px">
+            ${r.status === 'pending' ? `<button onclick="event.stopPropagation();updateReportStatus('${r.id}','dispatched')" style="font-size:11px;padding:4px 10px;background:#1D4ED8;color:white;border:none;border-radius:4px;cursor:pointer">✓ Dispatch</button>` : ''}
+            ${r.status !== 'resolved' ? `<button onclick="event.stopPropagation();updateReportStatus('${r.id}','resolved')" style="font-size:11px;padding:4px 10px;background:#15803d;color:white;border:none;border-radius:4px;cursor:pointer">✓ Resolve</button>` : ''}
+            ${r.status === 'pending' ? `<button onclick="event.stopPropagation();updateReportStatus('${r.id}','spam')" style="font-size:11px;padding:4px 10px;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;border-radius:4px;cursor:pointer">✗ Spam</button>` : ''}
+          </div>
+        </div>
+      `).join('');
+  }
+}
+
+function filterReports(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    b.style.background = 'white'; b.style.color = '#374151'; b.style.borderColor = '#e5e7eb';
+  });
+  btn.style.background = '#1D4ED8'; btn.style.color = 'white'; btn.style.borderColor = '#1D4ED8';
+  renderAdminFeed(filter);
+}
+
+async function updateReportStatus(id, status) {
+  await fetch(`/api/reports/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status })
+  });
+  await loadAdminReports();
+  refreshReportMarkers();
+}
+
+function adminSelectReport(id) {
+  const r = allReports.find(x => x.id === id);
+  if (!r || !r.lat || !r.lon) return;
+  closeAdminPanel();
+  map.flyTo([r.lat, r.lon], 15);
+}
+
+// ─── REPORT MARKERS ON MAIN MAP ─────────────────────────────────
+let reportMarkerLayer = L.layerGroup();
+
+async function refreshReportMarkers() {
+  if (!map) return;
+  if (!map.hasLayer(reportMarkerLayer)) reportMarkerLayer.addTo(map);
+  
+  const dateInput = document.getElementById('date-input');
+  const selectedDate = dateInput ? dateInput.value : '';
+  
+  reportMarkerLayer.clearLayers();
+  const resp = await fetch('/api/reports');
+  const reports = await resp.json();
+  const sevColors = { ankle_deep:'#facc15', knee_deep:'#f97316', vehicle_submerged:'#ef4444', road_blocked:'#7c3aed' };
+  
+  reports.filter(r => {
+    // Basic status filters
+    if (r.reliability === 'likely_spam' || r.status === 'spam' || r.status === 'resolved') return false;
+    
+    // Date filter: only show reports from the selected date
+    if (selectedDate && r.timestamp) {
+      return r.timestamp.startsWith(selectedDate);
+    }
+    return true;
+  }).forEach(r => {
+    if (!r.lat || !r.lon) return;
+    const color = sevColors[r.severity] || '#9ca3af';
+    const size = r.severity === 'vehicle_submerged' || r.severity === 'road_blocked' ? 20 : r.severity === 'knee_deep' ? 16 : 12;
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="position:relative;width:${size}px;height:${size}px">
+        <div style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:0.3;animation:pulse-ring 1.5s ease-out infinite"></div>
+        <div style="position:absolute;inset:3px;border-radius:50%;background:${color}"></div>
+      </div>`,
+      iconSize: [size, size], iconAnchor: [size/2, size/2]
+    });
+    L.marker([r.lat, r.lon], { icon })
+      .bindTooltip(`<b>${r.severity?.replace('_',' ')}</b><br>${r.description || 'No description'}<br><small>${r.reliability}</small>`)
+      .addTo(reportMarkerLayer);
+  });
+}
+
+// Refresh report markers every 30 seconds
+setInterval(refreshReportMarkers, 30000);
+
 // ─── Boot ───────────────────────────────────────────────────────────────────
 async function boot() {
   await initMap();
   setToday();
   fetchAndPredict();
+  refreshReportMarkers();
 }
 
 boot();

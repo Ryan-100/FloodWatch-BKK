@@ -1,3 +1,10 @@
+# ─── HOW TO RUN ────────────────────────────────────────────────────────────────
+# 1. Run: python server.py
+# 2. Open browser to: http://localhost:5000        ← main map
+# 3. Citizen report:  http://localhost:5000/report ← report portal
+# 4. Admin dashboard: http://localhost:5000/admin  ← command center
+# NEVER open HTML files directly via file:// — always go through Flask
+# ───────────────────────────────────────────────────────────────────────────────
 """
 FloodWatch Bangkok — Flask Backend
 Serves the dashboard and provides ML prediction endpoints.
@@ -11,12 +18,24 @@ import pandas as pd
 import numpy as np
 import os
 import math
+import time
+import atexit
 from datetime import datetime
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Add this debug route immediately after app = Flask(__name__) and CORS setup:
+@app.route('/ping')
+def ping():
+    return 'pong'
+
+
+
+
+
 
 # ─── Load model & static data on startup ───────────────────────────────────
 print("Loading model and data...")
@@ -103,14 +122,13 @@ if hasattr(model, 'feature_names_in_'):
     if model_features != FEATURE_COLS:
          raise RuntimeError(f"Startup Feature mismatch (Model)!\nExpected: {FEATURE_COLS}\nActual: {model_features}")
 
-print("Startup verification passed: Features match training columns exactly.")
-
-
 # ─── Routes ────────────────────────────────────────────────────────────────
 
 @app.route('/')
 def index():
     return send_from_directory(BASE_DIR, 'index.html')
+
+
 
 
 @app.route('/canals.geojson')
@@ -251,6 +269,82 @@ def health():
     })
 
 
+import time as _time
+
+@app.route('/api/reports', methods=['GET', 'POST'])
+def reports():
+    reports_path = os.path.join(BASE_DIR, 'reports.json')
+    if not os.path.exists(reports_path):
+        with open(reports_path, 'w') as f:
+            json.dump([], f)
+    if request.method == 'GET':
+        with open(reports_path) as f:
+            return jsonify(json.load(f))
+    data = request.json
+    score = 0
+    if data.get('photo'): score += 2
+    if data.get('severity') in ['knee_deep', 'vehicle_submerged', 'road_blocked']: score += 1
+    if data.get('description') and len(data.get('description','')) > 10: score += 1
+    lat = float(data.get('lat', 0))
+    lon = float(data.get('lon', 0))
+    if not (13.50 <= lat <= 14.00 and 100.30 <= lon <= 100.90): score -= 3
+    reliability = 'verified' if score >= 3 else 'suspicious' if score >= 1 else 'likely_spam'
+    report = {
+        'id': f"RPT-{int(_time.time())}",
+        'timestamp': datetime.now().isoformat(),
+        'lat': lat, 'lon': lon,
+        'severity': data.get('severity'),
+        'description': data.get('description', ''),
+        'photo': data.get('photo', None),
+        'reliability': reliability,
+        'reliability_score': score,
+        'status': 'pending'
+    }
+    with open(reports_path) as f:
+        reports_list = json.load(f)
+    reports_list.append(report)
+    with open(reports_path, 'w') as f:
+        json.dump(reports_list, f, indent=2)
+    return jsonify({'success': True, 'report_id': report['id'], 'reliability': reliability})
+
+
+@app.route('/api/reports/<report_id>', methods=['PATCH'])
+def update_report(report_id):
+    reports_path = os.path.join(BASE_DIR, 'reports.json')
+    if not os.path.exists(reports_path):
+        return jsonify({'error': 'No reports found'}), 404
+    with open(reports_path) as f:
+        reports_list = json.load(f)
+    for r in reports_list:
+        if r['id'] == report_id:
+            r['status'] = request.json.get('status', r['status'])
+            break
+    with open(reports_path, 'w') as f:
+        json.dump(reports_list, f, indent=2)
+    return jsonify({'success': True})
+
+
+
+
+@app.route('/<path:filename>')
+def serve_static(filename):
+    """Catch-all to serve any static file in the project folder."""
+    return send_from_directory(BASE_DIR, filename)
+
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    print("\n=== REGISTERED ROUTES ===")
+    for rule in app.url_map.iter_rules():
+        print(f"  {list(rule.methods)} {rule.rule}")
+    print("=========================\n")
+
+    for fname in ['index.html', 'app.js', 'style.css', 'reports.json']:
+        exists = os.path.exists(os.path.join(BASE_DIR, fname))
+        if not exists:
+             print(f"  ✗ MISSING {fname}")
+    print("─────────────────")
+    print("  http://localhost:5001        → Main dashboard")
+    print("─────────────────\n")
+    
+    port = int(os.environ.get('PORT', 5001))
     app.run(debug=False, host='0.0.0.0', port=port)

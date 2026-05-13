@@ -21,7 +21,15 @@
         <button class="tab-btn" id="btn-points" onclick="switchTab('points')">Risk Points</button>
         <button class="tab-btn" id="btn-data" onclick="switchTab('data')">Data Engine</button>
       </div>
-      <span class="clock-label" id="sim-clock">--</span>
+      <div class="flex-row-gap">
+        <button class="tab-btn" onclick="openReportDialog()" style="background:#ef4444;color:white;border-color:#ef4444">
+          📍 Report Flood
+        </button>
+        <button class="tab-btn" onclick="openAdminPanel()" style="background:#1D4ED8;color:white;border-color:#1D4ED8">
+          🛡 Admin
+        </button>
+        <span class="clock-label" id="sim-clock">--</span>
+      </div>
       <div class="badge live" id="mode-badge"><span class="dot-anim"></span><span id="badge-text">Live Forecast</span></div>
     </div>
   </div>
@@ -79,6 +87,7 @@
         <div class="lr"><div class="lsw" style="background:#22c55e"></div>Minimal (≤ 0.12)</div>
         <div class="lr"><div class="lsw" style="background:#16a34a"></div>Safe (> 0.12)</div>
         <div class="lr" style="margin-top: 4px; align-items: center;"><div class="lsw" style="border-radius: 50%; width: 8px; height: 8px; margin: 2px 3px 2px 1px; background:#ef4444"></div>Risk Point Dots</div>
+        <div class="lr" style="margin-top: 4px; align-items: center;"><div class="lsw" style="border-radius: 50%; width: 8px; height: 8px; margin: 2px 3px 2px 1px; background:#ef4444; box-shadow: 0 0 5px #ef4444"></div>Citizen Reports</div>
       </div>
     </div>
   </div>
@@ -112,6 +121,78 @@
       <button class="tb" onclick="stepHour(1)">▶</button>
       <span id="t-label" class="time-lbl">Hour 0</span>
     </div>
+  </div>
+</div>
+
+<div id="report-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+  <div id="report-dialog" style="background:white;border-radius:12px;padding:24px;width:420px;max-width:90vw;max-height:90vh;overflow-y:auto;position:relative;">
+    <button onclick="closeReportDialog()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280">✕</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:#111;margin-bottom:4px">📍 REPORT A FLOOD</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:16px">Help officials respond faster by sharing what you see</div>
+
+    <!-- Location -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Your Location</div>
+      <div id="report-map" style="height:160px;border-radius:8px;border:1px solid #e5e7eb;margin-bottom:6px"></div>
+      <div id="location-status" style="font-size:11px;color:#6b7280">📡 Detecting location...</div>
+    </div>
+
+    <!-- Severity -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Flood Severity</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button class="sev-btn" data-sev="ankle_deep" onclick="selectSeverity(this)" style="padding:10px 8px;border:2px solid #e5e7eb;border-radius:8px;background:white;cursor:pointer;font-size:12px;font-weight:600;color:#374151">🟡 Ankle-deep</button>
+        <button class="sev-btn" data-sev="knee_deep" onclick="selectSeverity(this)" style="padding:10px 8px;border:2px solid #e5e7eb;border-radius:8px;background:white;cursor:pointer;font-size:12px;font-weight:600;color:#374151">🟠 Knee-deep</button>
+        <button class="sev-btn" data-sev="vehicle_submerged" onclick="selectSeverity(this)" style="padding:10px 8px;border:2px solid #e5e7eb;border-radius:8px;background:white;cursor:pointer;font-size:12px;font-weight:600;color:#374151">🔴 Vehicle submerged</button>
+        <button class="sev-btn" data-sev="road_blocked" onclick="selectSeverity(this)" style="padding:10px 8px;border:2px solid #e5e7eb;border-radius:8px;background:white;cursor:pointer;font-size:12px;font-weight:600;color:#374151">🚧 Road blocked</button>
+      </div>
+    </div>
+
+    <!-- Description -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Description <span style="font-weight:400;text-transform:none">(optional)</span></div>
+      <textarea id="report-desc" maxlength="200" placeholder="Describe what you see..." style="width:100%;height:70px;border:1px solid #e5e7eb;border-radius:8px;padding:8px;font-size:13px;resize:none;box-sizing:border-box"></textarea>
+    </div>
+
+    <!-- Photo -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Photo Evidence <span style="font-weight:400;text-transform:none">(optional but boosts credibility)</span></div>
+      <input type="file" id="report-photo" accept="image/*" onchange="previewPhoto(this)" style="font-size:12px">
+      <img id="photo-preview" style="display:none;width:100%;border-radius:8px;margin-top:8px;max-height:120px;object-fit:cover">
+    </div>
+
+    <!-- Error -->
+    <div id="report-error" style="display:none;color:#ef4444;font-size:12px;margin-bottom:10px;padding:8px;background:#fef2f2;border-radius:6px"></div>
+
+    <!-- Submit -->
+    <button onclick="submitReport()" id="submit-btn" style="width:100%;padding:12px;background:#1D4ED8;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">
+      Submit Report
+    </button>
+
+    <!-- Success -->
+    <div id="report-success" style="display:none;text-align:center;padding:20px 0">
+      <div style="font-size:40px;margin-bottom:8px">✅</div>
+      <div style="font-size:16px;font-weight:700;color:#15803d;margin-bottom:4px">Report Submitted</div>
+      <div id="success-detail" style="font-size:12px;color:#6b7280"></div>
+      <button onclick="closeReportDialog()" style="margin-top:16px;padding:8px 24px;background:#1D4ED8;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="admin-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:12px;width:700px;max-width:95vw;max-height:90vh;overflow:hidden;position:relative;display:flex;flex-direction:column;">
+    <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800">🛡 ADMIN — CITIZEN REPORTS</div>
+      <button onclick="closeAdminPanel()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280">✕</button>
+    </div>
+    <div id="admin-stats" style="display:flex;gap:12px;padding:12px 20px;border-bottom:1px solid #f3f4f6;font-size:12px"></div>
+    <div style="display:flex;gap:8px;padding:8px 20px;border-bottom:1px solid #f3f4f6">
+      <button class="filter-btn active" onclick="filterReports('all', this)" style="font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid #1D4ED8;background:#1D4ED8;color:white;cursor:pointer">All</button>
+      <button class="filter-btn" onclick="filterReports('pending', this)" style="font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid #e5e7eb;background:white;color:#374151;cursor:pointer">Pending</button>
+      <button class="filter-btn" onclick="filterReports('dispatched', this)" style="font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid #e5e7eb;background:white;color:#374151;cursor:pointer">Dispatched</button>
+      <button class="filter-btn" onclick="filterReports('resolved', this)" style="font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid #e5e7eb;background:white;color:#374151;cursor:pointer">Resolved</button>
+    </div>
+    <div id="admin-feed" style="overflow-y:auto;flex:1;padding:12px 20px"></div>
   </div>
 </div>
 

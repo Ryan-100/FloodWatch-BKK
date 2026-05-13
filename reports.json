@@ -1,0 +1,14 @@
+[
+  {
+    "id": "RPT-1778672403",
+    "timestamp": "2026-05-13T18:40:03.288264",
+    "lat": 13.774250075792796,
+    "lon": 100.55894742222871,
+    "severity": "road_blocked",
+    "description": "water blocks the way",
+    "photo": null,
+    "reliability": "suspicious",
+    "reliability_score": 2,
+    "status": "resolved"
+  }
+]
