@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FloodWatch Bangkok — Live Prediction</title>
+<meta name="description" content="Real-time flood risk prediction for Bangkok using Isolation Forest ML model.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<div id="app">
+  <div class="topbar">
+    <div>
+      <div class="logo">⬡ FloodWatch Bangkok</div>
+      <div class="logo-sub">Hydrological Risk Model · Live Data · Regional Basemap</div>
+    </div>
+    <div class="flex-row-gap">
+      <div class="tab-nav">
+        <button class="tab-btn active" id="btn-map" onclick="switchTab('map')">Map View</button>
+        <button class="tab-btn" id="btn-points" onclick="switchTab('points')">Risk Points</button>
+        <button class="tab-btn" id="btn-data" onclick="switchTab('data')">Data Engine</button>
+      </div>
+      <span class="clock-label" id="sim-clock">--</span>
+      <div class="badge live" id="mode-badge"><span class="dot-anim"></span><span id="badge-text">Live Forecast</span></div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div>
+      <div class="sec">Weather Readings</div>
+      <div class="mgrid">
+        <div class="mc"><div class="mc-lbl">Rainfall</div><div class="mc-val" id="m-rain">--<span class="mc-u"> mm</span></div><div class="mc-d nt" id="d-rain"></div></div>
+        <div class="mc"><div class="mc-lbl">Wind Speed</div><div class="mc-val" id="m-wind">--<span class="mc-u"> km/h</span></div><div class="mc-d nt" id="d-wind"></div></div>
+        <div class="mc"><div class="mc-lbl">Soil Moisture</div><div class="mc-val" id="m-soil">--<span class="mc-u"> m³/m³</span></div><div class="mc-d nt" id="d-soil"></div></div>
+        <div class="mc"><div class="mc-lbl">Elevation</div><div class="mc-val" id="m-elev">--<span class="mc-u"> m</span></div><div class="mc-d nt" id="d-elev">Selected point</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec flex-between"><span>Date &amp; Time</span>
+        <div style="display:flex;align-items:center;gap:6px;font-size:9px;text-transform:none;color:#1D4ED8">
+          <label class="switch"><input type="checkbox" id="mode-toggle" onchange="onModeToggle()"><span class="slider"></span></label>
+          <span id="mode-label">Live Forecast</span>
+        </div>
+      </div>
+      <div class="sblock">
+        <div class="date-row">
+          <input type="date" class="date-input" id="date-input">
+        </div>
+        <div class="sr"><div class="sr-h"><span class="sr-n">Hour</span><span class="sr-v" id="v-hour">0:00</span></div>
+          <input type="range" id="s-hour" min="0" max="23" value="0" oninput="onHourSlider()">
+        </div>
+        <button class="fetch-btn" id="fetch-btn" onclick="fetchAndPredict()">⟳ Fetch &amp; Predict</button>
+      </div>
+    </div>
+
+    <div id="point-details" class="hidden">
+      <div class="sec">Selected Point</div>
+      <div class="point-box">
+        <div class="pb-row"><span class="pb-label">Position</span><span class="pb-val" id="pt-pos">--</span></div>
+        <div class="pb-row"><span class="pb-label">Elevation</span><span class="pb-val" id="pt-elev">--</span></div>
+        <div class="pb-row"><span class="pb-label">Canal Dist</span><span class="pb-val" id="pt-canal">--</span></div>
+        <div class="pb-row"><span class="pb-label">Anomaly Score</span><span class="pb-val" id="pt-score">--</span></div>
+        <div class="pb-row"><span class="pb-label">Threshold</span><span class="pb-val" id="pt-thresh">--</span></div>
+        <div style="margin:6px 0 4px"><div class="prog-wrap"><div class="prog-fill" id="pt-bar" style="width:0"></div></div></div>
+        <div class="pb-row"><span class="pb-label">Prediction</span><span id="pt-pred"></span></div>
+        <div class="pb-row"><span class="pb-label">Risk Level</span><span id="pt-risk">--</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec">Legend</div>
+      <div class="legend" style="display:flex; flex-direction:column; gap:4px; font-size:11px">
+        <div class="lr"><div class="lsw" style="background:#ef4444"></div>Critical (≤ -0.18)</div>
+        <div class="lr"><div class="lsw" style="background:#f97316"></div>High (≤ -0.13)</div>
+        <div class="lr"><div class="lsw" style="background:#facc15"></div>Moderate (≤ -0.05)</div>
+        <div class="lr"><div class="lsw" style="background:#86efac"></div>Low (≤ 0.05)</div>
+        <div class="lr"><div class="lsw" style="background:#22c55e"></div>Minimal (≤ 0.12)</div>
+        <div class="lr"><div class="lsw" style="background:#16a34a"></div>Safe (> 0.12)</div>
+        <div class="lr" style="margin-top: 4px; align-items: center;"><div class="lsw" style="border-radius: 50%; width: 8px; height: 8px; margin: 2px 3px 2px 1px; background:#ef4444"></div>Risk Point Dots</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div id="map"></div>
+    <div id="loading" class="loading-overlay hidden">⟳ Fetching data & running predictions…</div>
+    <div id="data-panel">
+      <div style="font-weight:600;font-size:14px;margin-bottom:12px">Grid Point Predictions</div>
+      <table class="data-table">
+        <thead><tr>
+          <th>#</th><th>Lat</th><th>Lon</th><th>Elev (m)</th><th>Canal (m)</th>
+          <th>Precip</th><th>Wind</th><th>Soil</th><th>Score</th><th>Confidence</th><th>Prediction</th>
+        </tr></thead>
+        <tbody id="data-table-body"></tbody>
+      </table>
+      <div style="margin-top: 12px; font-size: 11px; color: #6b7280; font-style: italic;">
+        Showing top 50 highest-risk grid points out of 10,000 total.<br>
+        ~ indicates estimated terrain value (fallback). Real BMA sensor data would provide per-street accuracy.
+      </div>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <span><span class="sd sd-blue"></span>FloodML v1.0</span>
+    <span id="status-grid-count"><span class="sd sd-green"></span>100 grid points</span>
+    <span id="status-src"><span class="sd sd-orange"></span>Awaiting data</span>
+    <div class="tctrl">
+      <span>Browse hours:</span>
+      <button class="tb" onclick="stepHour(-1)">◀</button>
+      <button class="tb" onclick="stepHour(1)">▶</button>
+      <span id="t-label" class="time-lbl">Hour 0</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

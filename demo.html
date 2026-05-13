@@ -1,0 +1,824 @@
+<style>
+* { box-sizing: border-box }
+* { margin: 0 }
+* { padding: 0 }
+body { font-family: var(--font-sans, sans-serif) }
+body { color: var(--color-text-primary) }
+body { overflow: hidden }
+#app { display: grid }
+#app { grid-template-columns: 280px 1fr }
+#app { grid-template-rows: 48px 1fr 34px }
+#app { height: 100vh }
+.topbar { grid-column: 1 / -1 }
+.topbar { background: #fff }
+.topbar { border-bottom: 1px solid #e5e5e3 }
+.topbar { padding: 0 16px }
+.topbar { display: flex }
+.topbar { align-items: center }
+.topbar { justify-content: space-between }
+.logo { font-size: 13px }
+.logo { font-weight: 600 }
+.logo { color: #1a1a18 }
+.logo-sub { font-size: 10px }
+.logo-sub { color: #888 }
+.badge { font-size: 10px }
+.badge { padding: 3px 9px }
+.badge { border-radius: 20px }
+.badge { background: #FEE2E2 }
+.badge { color: #B91C1C }
+.badge { font-weight: 600 }
+.badge { display: flex }
+.badge { align-items: center }
+.badge { gap: 4px }
+.dot-anim { width: 5px }
+.dot-anim { height: 5px }
+.dot-anim { border-radius: 50% }
+.dot-anim { background: currentColor }
+.dot-anim { animation: blink 1.5s ease-in-out infinite }
+@keyframes blink { 0%, 100% { opacity: 1 } 50% { opacity: .2 } }
+.tab-nav { display: flex }
+.tab-nav { gap: 10px }
+.tab-nav { margin-right: 20px }
+.tab-btn { padding: 6px 12px }
+.tab-btn { font-size: 11px }
+.tab-btn { font-weight: 600 }
+.tab-btn { border-radius: 6px }
+.tab-btn { cursor: pointer }
+.tab-btn { border: 1px solid #e5e5e3 }
+.tab-btn { background: #fafaf9 }
+.tab-btn { color: #555 }
+.tab-btn.active { background: #2563EB }
+.tab-btn.active { color: #fff }
+.tab-btn.active { border-color: #1D4ED8 }
+.sidebar { background: #fafaf9 }
+.sidebar { border-right: 1px solid #e5e5e3 }
+.sidebar { overflow-y: auto }
+.sidebar { padding: 14px }
+.sidebar { display: flex }
+.sidebar { flex-direction: column }
+.sidebar { gap: 13px }
+.sidebar { z-index: 10 }
+.sec { font-size: 10px }
+.sec { font-weight: 700 }
+.sec { letter-spacing: .08em }
+.sec { color: #888 }
+.sec { text-transform: uppercase }
+.sec { margin-bottom: 6px }
+.mgrid { display: grid }
+.mgrid { grid-template-columns: 1fr 1fr }
+.mgrid { gap: 6px }
+.mc { background: #fff }
+.mc { border: 1px solid #e8e8e6 }
+.mc { border-radius: 8px }
+.mc { padding: 9px 11px }
+.mc-lbl { font-size: 10px }
+.mc-lbl { color: #888 }
+.mc-lbl { margin-bottom: 2px }
+.mc-val { font-size: 18px }
+.mc-val { font-weight: 600 }
+.mc-val { color: #1a1a18 }
+.mc-val { line-height: 1.1 }
+.mc-u { font-size: 10px }
+.mc-u { color: #aaa }
+.mc-u { font-weight: 400 }
+.mc-d { font-size: 10px }
+.mc-d { margin-top: 2px }
+.up { color: #DC2626 }
+.dn { color: #16A34A }
+.nt { color: #888 }
+.sblock { display: flex }
+.sblock { flex-direction: column }
+.sblock { gap: 9px }
+.sr { display: flex }
+.sr { flex-direction: column }
+.sr { gap: 3px }
+.sr-h { display: flex }
+.sr-h { justify-content: space-between }
+.sr-h { align-items: center }
+.sr-n { font-size: 11px }
+.sr-n { color: #555 }
+.sr-v { font-size: 11px }
+.sr-v { font-weight: 600 }
+.sr-v { color: #1a1a18 }
+input[type=range] { width: 100% }
+input[type=range] { accent-color: #2563EB }
+input[type=range] { cursor: pointer }
+input[type=range]:disabled { opacity: 0.4 }
+input[type=range]:disabled { cursor: not-allowed }
+.scgrid { display: grid }
+.scgrid { grid-template-columns: 1fr 1fr }
+.scgrid { gap: 5px }
+.sc { padding: 7px 8px }
+.sc { border-radius: 7px }
+.sc { border: 1px solid #e0e0de }
+.sc { background: #fff }
+.sc { font-size: 11px }
+.sc { font-weight: 500 }
+.sc { cursor: pointer }
+.sc { color: #555 }
+.sc { transition: all .15s }
+.sc { text-align: center }
+.sc:hover { background: #f0f4ff }
+.sc:hover { border-color: #93c5fd }
+.sc:hover { color: #1d4ed8 }
+.sc.active { background: #EFF6FF }
+.sc.active { border-color: #3B82F6 }
+.sc.active { color: #1D4ED8 }
+.sc.active { font-weight: 600 }
+.legend { display: flex }
+.legend { flex-direction: column }
+.legend { gap: 5px }
+.lr { display: flex }
+.lr { align-items: center }
+.lr { gap: 8px }
+.lr { font-size: 11px }
+.lr { color: #444 }
+.lsw { width: 22px }
+.lsw { height: 11px }
+.lsw { border-radius: 3px }
+.lsw { flex-shrink: 0 }
+.lsw { border: 1px solid rgba(0,0,0,0.1) }
+.main-content { grid-column: 2 }
+.main-content { grid-row: 2 }
+.main-content { position: relative }
+#map { width: 100% }
+#map { height: 100% }
+#map { position: absolute }
+#map { top: 0 }
+#map { left: 0 }
+#data-panel { width: 100% }
+#data-panel { height: 100% }
+#data-panel { position: absolute }
+#data-panel { top: 0 }
+#data-panel { left: 0 }
+#data-panel { background: #fff }
+#data-panel { padding: 24px }
+#data-panel { overflow-y: auto }
+#data-panel { display: none }
+#data-panel { z-index: 5 }
+.formula-box { background: #f8fafc }
+.formula-box { border: 1px solid #e2e8f0 }
+.formula-box { border-radius: 8px }
+.formula-box { padding: 16px }
+.formula-box { margin-bottom: 24px }
+.formula-box { font-family: monospace }
+.formula-box { font-size: 13px }
+.formula-box { color: #334155 }
+.formula-title { font-weight: bold }
+.formula-title { margin-bottom: 8px }
+.formula-title { font-family: var(--font-sans, sans-serif) }
+.formula-title { font-size: 14px }
+.formula-title { color: #0f172a }
+.data-controls { display: flex }
+.data-controls { justify-content: space-between }
+.data-controls { align-items: center }
+.data-controls { margin-bottom: 16px }
+.btn-primary { background: #2563EB }
+.btn-primary { color: #fff }
+.btn-primary { border: none }
+.btn-primary { padding: 8px 16px }
+.btn-primary { border-radius: 6px }
+.btn-primary { cursor: pointer }
+.btn-primary { font-size: 12px }
+.btn-primary { font-weight: 600 }
+.btn-primary:hover { background: #1D4ED8 }
+.toggle-wrap { display: flex }
+.toggle-wrap { align-items: center }
+.toggle-wrap { gap: 8px }
+.toggle-wrap { font-size: 13px }
+.toggle-wrap { font-weight: 500 }
+.data-table { width: 100% }
+.data-table { border-collapse: collapse }
+.data-table { font-size: 12px }
+.data-table { text-align: left }
+.data-table th { padding: 10px }
+.data-table td { padding: 10px }
+.data-table th { border-bottom: 1px solid #e5e5e3 }
+.data-table td { border-bottom: 1px solid #e5e5e3 }
+.data-table th { background: #fafaf9 }
+.data-table th { font-weight: 600 }
+.data-table th { color: #555 }
+.data-table th { position: sticky }
+.data-table th { top: 0 }
+.data-table th { z-index: 2 }
+.t-input { width: 65px }
+.t-input { padding: 5px 6px }
+.t-input { border: 1px solid #cbd5e1 }
+.t-input { border-radius: 4px }
+.t-input { font-family: inherit }
+.t-input { font-size: 12px }
+.t-input { transition: border-color 0.15s }
+.t-input:focus { outline: none }
+.t-input:focus { border-color: #2563EB }
+.t-input:focus { box-shadow: 0 0 0 2px rgba(37,99,235,0.2) }
+.t-input:hover { border-color: #94a3b8 }
+.statusbar { grid-column: 1 / -1 }
+.statusbar { background: #fff }
+.statusbar { border-top: 1px solid #e5e5e3 }
+.statusbar { padding: 0 16px }
+.statusbar { display: flex }
+.statusbar { align-items: center }
+.statusbar { gap: 14px }
+.statusbar { font-size: 10px }
+.statusbar { color: #888 }
+.sd { width: 5px }
+.sd { height: 5px }
+.sd { border-radius: 50% }
+.sd { display: inline-block }
+.sd { margin-right: 3px }
+.tctrl { margin-left: auto }
+.tctrl { display: flex }
+.tctrl { align-items: center }
+.tctrl { gap: 5px }
+.tb { background: #fff }
+.tb { border: 1px solid #e0e0de }
+.tb { border-radius: 5px }
+.tb { padding: 3px 8px }
+.tb { font-size: 10px }
+.tb { cursor: pointer }
+.tb { color: #555 }
+.tb { font-weight: 500 }
+.tb:hover { background: #f5f5f4 }
+.tb.playing { color: #DC2626 }
+.tb.playing { border-color: #fca5a5 }
+.tb.playing { background: #FEF2F2 }
+.switch { position: relative }
+.switch { display: inline-block }
+.switch { width: 36px }
+.switch { height: 20px }
+.switch input { opacity: 0 }
+.switch input { width: 0 }
+.switch input { height: 0 }
+.slider { position: absolute }
+.slider { cursor: pointer }
+.slider { top: 0 }
+.slider { left: 0 }
+.slider { right: 0 }
+.slider { bottom: 0 }
+.slider { background-color: #ccc }
+.slider { transition: .4s }
+.slider { border-radius: 24px }
+.slider:before { position: absolute }
+.slider:before { content: "" }
+.slider:before { height: 14px }
+.slider:before { width: 14px }
+.slider:before { left: 3px }
+.slider:before { bottom: 3px }
+.slider:before { background-color: white }
+.slider:before { transition: .4s }
+.slider:before { border-radius: 50% }
+input:checked + .slider { background-color: #2563EB }
+input:checked + .slider:before { transform: translateX(16px) }
+.clock-label { font-size: 11px }
+.clock-label { color: #888 }
+.bg-minor { background: rgba(0,0,255,0.4) }
+.bg-mod { background: rgba(0,255,0,0.6) }
+.bg-sev { background: rgba(255,255,0,0.8) }
+.bg-ext { background: rgba(255,0,0,0.9) }
+.flex-between { display: flex }
+.flex-between { justify-content: space-between }
+.flex-between { align-items: center }
+.wrap-custom { font-size: 9px }
+.wrap-custom { text-transform: none }
+.wrap-custom { color: #1D4ED8 }
+.hidden { display: none }
+.slider-custom { width: 44px }
+.slider-custom { height: 24px }
+.slider-btn { border-radius: 24px }
+.data-mode-lbl { font-size: 14px }
+.font-heavy { font-weight: 600 }
+.sd-blue { background: #3B82F6 }
+.sd-green { background: #16A34A }
+.sd-orange { background: #D97706 }
+.sd-purple { background: #7C3AED }
+.time-lbl { min-width: 50px }
+.time-lbl { color: #333 }
+.time-lbl { font-weight: 500 }
+.flex-row-gap { display: flex }
+.flex-row-gap { align-items: center }
+.flex-row-gap { gap: 15px }
+</style>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+
+<div id="app">
+  <div class="topbar">
+    <div>
+      <div class="logo">⬡ FloodWatch Bangkok</div>
+      <div class="logo-sub">Hydrological Risk Model · Simulated Data · Regional Basemap</div>
+    </div>
+    
+    <div class="flex-row-gap">
+      <div class="tab-nav">
+        <button class="tab-btn active" id="btn-map" onclick="switchTab('map')">Map View</button>
+        <button class="tab-btn" id="btn-data" onclick="switchTab('data')">Data Engine</button>
+      </div>
+      <span class="clock-label" id="sim-clock">Hour 0 of 24</span>
+      <div class="badge"><span class="dot-anim"></span>Live Sim</div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div>
+      <div class="sec">Sensor Readings</div>
+      <div class="mgrid">
+        <div class="mc"><div class="mc-lbl">Rainfall</div><div class="mc-val" id="m-rain">--<span class="mc-u"> mm/h</span></div><div class="mc-d up" id="d-rain"></div></div>
+        <div class="mc"><div class="mc-lbl">Canal Level</div><div class="mc-val" id="m-canal">--<span class="mc-u"> m</span></div><div class="mc-d" id="d-canal"></div></div>
+        <div class="mc"><div class="mc-lbl">Sewer Load</div><div class="mc-val" id="m-sewer">--<span class="mc-u"> %</span></div><div class="mc-d" id="d-sewer"></div></div>
+        <div class="mc"><div class="mc-lbl">Pump Rate</div><div class="mc-val" id="m-pump">--<span class="mc-u"> %</span></div><div class="mc-d" id="d-pump"></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec flex-between">
+        <span>Input Parameters</span>
+        <div class="toggle-wrap wrap-custom">
+          <label class="switch">
+            <input type="checkbox" id="dynamic-time-toggle" onchange="toggleTimeDynamics()">
+            <span class="slider"></span>
+          </label>
+          <span id="dynamic-time-label">Evolving over 24h</span>
+        </div>
+      </div>
+      <div class="sblock">
+        <div class="sr"><div class="sr-h"><span class="sr-n">Rainfall Intensity</span><span class="sr-v" id="v-rain">50 mm/h</span></div><input type="range" id="s-rain" min="0" max="200" value="50" oninput="onSlider()"></div>
+        <div class="sr"><div class="sr-h"><span class="sr-n">Canal Water Level</span><span class="sr-v" id="v-canal">2.0 m</span></div><input type="range" id="s-canal" min="0" max="50" value="20" oninput="onSlider()"></div>
+        <div class="sr"><div class="sr-h"><span class="sr-n">Sewer Saturation</span><span class="sr-v" id="v-sewer">50%</span></div><input type="range" id="s-sewer" min="0" max="100" value="50" oninput="onSlider()"></div>
+        <div class="sr"><div class="sr-h"><span class="sr-n">Pump Efficiency</span><span class="sr-v" id="v-pump">80%</span></div><input type="range" id="s-pump" min="0" max="100" value="80" oninput="onSlider()"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec">Scenarios (Sets Baselines)</div>
+      <div class="scgrid">
+        <div class="sc active" onclick="setScenario(this,'normal')">Normal</div>
+        <div class="sc" onclick="setScenario(this,'storm')">Tropical Storm</div>
+        <div class="sc" onclick="setScenario(this,'extreme')">Extreme Event</div>
+        <div class="sc" onclick="setScenario(this,'replay2011')">2011 Replay</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec">Legend (Heatmap)</div>
+      <div class="legend">
+        <div class="lr"><div class="lsw bg-minor"></div>Minor Risk</div>
+        <div class="lr"><div class="lsw bg-mod"></div>Moderate Risk</div>
+        <div class="lr"><div class="lsw bg-sev"></div>Severe Risk</div>
+        <div class="lr"><div class="lsw bg-ext"></div>Extreme Risk</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div id="map"></div>
+    
+    <div id="data-panel">
+      <div class="formula-title">Hydrological Engine Logic</div>
+      <div class="formula-box">
+        <div><strong>Net Volume</strong> = Rainwater Inflow + Canal Overflow - Pump Output - Sewer Capacity</div>
+        <br>
+        <div><strong>Flood Depth</strong> = Net Volume / Floodable Area</div>
+      </div>
+
+      <div class="data-controls">
+        <div class="toggle-wrap">
+          <label class="switch slider-custom">
+            <input type="checkbox" id="random-toggle" onchange="toggleDataSource()">
+            <span class="slider slider-btn"></span>
+          </label>
+          <span id="data-mode-label" class="data-mode-lbl">Using Global Sliders</span>
+        </div>
+        <button class="btn-primary hidden" id="btn-regen" onclick="generateRandomData()">Randomize Data</button>
+      </div>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>District</th>
+            <th>Rain (mm/h)</th>
+            <th>Canal (m)</th>
+            <th>Sewer (%)</th>
+            <th>Pump (%)</th>
+            <th>Calculated Depth (cm)</th>
+          </tr>
+        </thead>
+        <tbody id="data-table-body">
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <span><span class="sd sd-blue"></span>HydroSim v3.0</span>
+    <span><span class="sd sd-green"></span>50 districts</span>
+    <span id="status-data-type"><span class="sd sd-orange"></span>Simulated sensor data</span>
+    <div class="tctrl">
+      <span>Simulate time:</span>
+      <button class="tb" id="play-btn" onclick="togglePlay()">▶ Play</button>
+      <button class="tb" onclick="stepTime(-1)">◀</button>
+      <button class="tb" onclick="stepTime(1)">▶</button>
+      <span id="t-label" class="time-lbl">Hour 0</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+<script>
+const DISTRICTS = [
+  ["Phra Nakhon",     13.758,100.494,1.2,0.90,0.50, 95], ["Pom Prap",        13.752,100.511,1.1,0.85,0.45, 85],
+  ["Samphanthawong",  13.737,100.510,0.9,0.95,0.40, 40], ["Bang Rak",        13.725,100.515,1.0,0.90,0.50, 65],
+  ["Dusit",           13.775,100.510,1.5,0.65,0.58,115], ["Bang Sue",        13.800,100.525,1.8,0.55,0.65,145],
+  ["Thon Buri",       13.727,100.476,0.9,0.88,0.42,125], ["Bangkok Yai",     13.733,100.470,0.8,0.90,0.40,100],
+  ["Bangkok Noi",     13.762,100.474,1.0,0.88,0.42,125], ["Taling Chan",     13.775,100.447,0.7,0.92,0.35,100],
+  ["Phasi Charoen",   13.718,100.447,0.9,0.78,0.45,155], ["Bang Phlat",      13.793,100.478,1.2,0.78,0.50,145],
+  ["Tawi Watthana",   13.773,100.407,1.5,0.62,0.58, 85], ["Bang Khae",       13.693,100.419,1.2,0.65,0.55,285],
+  ["Nong Khaem",      13.683,100.380,1.3,0.60,0.55,235], ["Sathon",          13.720,100.522,1.0,0.80,0.50,105],
+  ["Khlong San",      13.730,100.502,0.8,0.92,0.38, 75], ["Rat Burana",      13.668,100.516,0.6,0.88,0.35,125],
+  ["Chom Thong",      13.685,100.472,0.7,0.82,0.40,145], ["Bang Bon",        13.645,100.420,0.8,0.72,0.45,115],
+  ["Thung Khru",      13.649,100.497,0.5,0.85,0.35,115], ["Bang Khun Thian", 13.621,100.457,0.4,0.88,0.32,175],
+  ["Lak Si",          13.874,100.573,2.1,0.30,0.78,165], ["Don Mueang",      13.912,100.606,2.4,0.20,0.82,185],
+  ["Bang Khen",       13.873,100.605,2.1,0.30,0.75,220], ["Chatuchak",       13.836,100.554,2.0,0.35,0.72,165],
+  ["Lat Phrao",       13.834,100.617,2.2,0.25,0.78,240], ["Huai Khwang",     13.778,100.569,1.8,0.40,0.68,175],
+  ["Din Daeng",       13.772,100.552,1.7,0.50,0.65,155], ["Wang Thonglang",  13.784,100.612,2.0,0.30,0.70,165],
+  ["Bueng Kum",       13.797,100.657,2.3,0.20,0.80,185], ["Khan Na Yao",     13.819,100.699,2.5,0.15,0.82,175],
+  ["Nong Chok",       13.878,100.742,2.8,0.10,0.88,165], ["Min Buri",        13.820,100.748,2.2,0.25,0.75,175],
+  ["Lat Krabang",     13.742,100.762,1.8,0.40,0.65,215], ["Saphan Sung",     13.768,100.673,2.1,0.30,0.72,175],
+  ["Bang Kapi",       13.762,100.638,1.9,0.40,0.68,185], ["Suan Luang",      13.745,100.634,1.7,0.45,0.65,165],
+  ["Phaya Thai",      13.760,100.531,1.6,0.50,0.62,155], ["Ratchathewi",     13.751,100.535,1.6,0.55,0.62,155],
+  ["Pathum Wan",      13.740,100.540,1.5,0.60,0.70,100], ["Watthana",        13.740,100.567,1.4,0.58,0.65,145],
+  ["Khlong Toei",     13.720,100.562,0.7,0.85,0.42, 95], ["Phra Khanong",    13.701,100.592,0.9,0.75,0.48,155],
+  ["Bang Na",         13.667,100.618,0.8,0.70,0.45,185], ["Prawet",          13.697,100.660,1.6,0.50,0.60,185],
+  ["Om Kret",         13.920,100.533,2.5,0.20,0.85,165], ["Don Mueang N",    13.900,100.620,2.3,0.22,0.80,170],
+  ["Lak Si S",        13.854,100.550,2.0,0.32,0.75,150], ["Bang Phlat S",    13.808,100.494,1.3,0.72,0.52,130]
+]
+
+let baseP = {rain:50, canal:20, sewer:50, pump:80}
+let P = {rain:50, canal:20, sewer:50, pump:80}
+let baseRandomData = []
+let randomData = []
+
+let hour = 0
+let playing = false
+let playTimer = null
+let map
+let heatLayer
+let useRandomMode = false
+let useTimeDynamics = false
+
+function floodDepth(d, index) {
+  const A = 6157521
+  const C = 0.95 - (d[5] * 0.2)
+  const A_floodable = A * 0.4
+  
+  let rain = P.rain
+  let canal = P.canal / 10
+  let sewer = P.sewer / 100
+  let pump = P.pump / 100
+  
+  if (useRandomMode && randomData[index]) {
+    rain = randomData[index].rain
+    canal = randomData[index].canal / 10
+    sewer = randomData[index].sewer / 100
+    pump = randomData[index].pump / 100
+  }
+
+  const Q_rain = C * (rain / 1000) * A
+  const bankElevation = d[3] + 1.0
+  const head = Math.max(0, canal - bankElevation)
+  const L = 2000 * d[4]
+  const Q_canal = 1.6 * L * Math.pow(head, 1.5) * 3600
+  
+  const maxSewerCapacity = 0.05 * A
+  const availableSewer = maxSewerCapacity * (1 - sewer)
+  const maxPumpCapacity = 100000
+  const Q_out = availableSewer + (maxPumpCapacity * pump)
+
+  let netVolume = (Q_rain + Q_canal) - Q_out
+  if (d[3] > 1.5) {
+    netVolume = netVolume - ((d[3] - 1.5) * 20000)
+  }
+  
+  const timeFac = useTimeDynamics ? 1.0 : Math.min(1, hour/6) * (1 + Math.sin(hour*0.25)*0.04)
+  netVolume = netVolume * timeFac
+  
+  const depthMeters = Math.max(0, netVolume / A_floodable)
+  return depthMeters * 100
+}
+
+function initTable() {
+  const tbody = document.getElementById('data-table-body')
+  tbody.innerHTML = ''
+  DISTRICTS.forEach((d, i) => {
+    const tr = document.createElement('tr')
+    tr.innerHTML = `
+      <td><strong>${d[0]}</strong></td>
+      <td><input type="number" id="t-rain-${i}" class="t-input" min="0" oninput="updateGridData(${i}, 'rain', this.value)"></td>
+      <td><input type="number" id="t-canal-${i}" class="t-input" step="0.1" min="0" oninput="updateGridData(${i}, 'canal', this.value)"></td>
+      <td><input type="number" id="t-sewer-${i}" class="t-input" min="0" max="100" oninput="updateGridData(${i}, 'sewer', this.value)"></td>
+      <td><input type="number" id="t-pump-${i}" class="t-input" min="0" max="100" oninput="updateGridData(${i}, 'pump', this.value)"></td>
+      <td id="t-depth-${i}" class="font-heavy">0.0</td>
+    `
+    tbody.appendChild(tr)
+  })
+}
+
+function initMap() {
+  map = L.map('map', {center:[13.756, 100.540], zoom:11})
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© OpenStreetMap',
+    maxZoom:19
+  }).addTo(map)
+
+  heatLayer = L.heatLayer([], {
+    radius: 40,
+    blur: 30,
+    maxZoom: 13,
+    gradient: {0.1: 'blue', 0.4: 'lime', 0.7: 'yellow', 1.0: 'red'}
+  }).addTo(map)
+  
+  baseRandomData = DISTRICTS.map(() => ({rain: baseP.rain, canal: baseP.canal, sewer: baseP.sewer, pump: baseP.pump}))
+  
+  applyTimeDynamics()
+}
+
+function refreshMap() {
+  let heatPoints = []
+  DISTRICTS.forEach((d, i) => {
+    const depth = floodDepth(d, i)
+    if (depth > 5) { 
+      let intensity = Math.min(1, depth / 100) 
+      heatPoints.push([d[1], d[2], intensity])
+    }
+  })
+  heatLayer.setLatLngs(heatPoints)
+  updateDataTable()
+}
+
+function generateRandomData() {
+  baseRandomData = DISTRICTS.map(() => ({
+    rain: Math.floor(Math.random() * 200),
+    canal: Math.floor(Math.random() * 50),
+    sewer: Math.floor(Math.random() * 100),
+    pump: Math.floor(Math.random() * 100)
+  }))
+  applyTimeDynamics()
+  if (useRandomMode) { refreshMap() }
+}
+
+function applyTimeDynamics() {
+  if (!useTimeDynamics) {
+    P.rain = baseP.rain
+    P.canal = baseP.canal
+    P.sewer = baseP.sewer
+    P.pump = baseP.pump
+    if (useRandomMode) {
+      randomData = JSON.parse(JSON.stringify(baseRandomData))
+    }
+  } else {
+    let rC = 1.0 + Math.sin((hour/24)*Math.PI) * 1.5
+    let cC = 1.0 + Math.sin((hour/24)*Math.PI) * 0.5
+    let sC = 1.0 + Math.sin((hour/24)*Math.PI) * 0.6
+    let pC = 1.0 - Math.sin((hour/24)*Math.PI) * 0.3
+
+    P.rain = Math.round(baseP.rain * rC)
+    P.canal = Math.round(baseP.canal * cC)
+    P.sewer = Math.min(100, Math.round(baseP.sewer * sC))
+    P.pump = Math.max(0, Math.min(100, Math.round(baseP.pump * pC)))
+
+    if (useRandomMode) {
+      randomData = baseRandomData.map(d => ({
+        rain: Math.max(0, Math.round(d.rain * rC)),
+        canal: Math.max(0, Math.round(d.canal * cC)),
+        sewer: Math.min(100, Math.round(d.sewer * sC)),
+        pump: Math.max(0, Math.min(100, Math.round(d.pump * pC)))
+      }))
+    }
+  }
+
+  document.getElementById('s-rain').value = P.rain
+  document.getElementById('s-canal').value = P.canal
+  document.getElementById('s-sewer').value = P.sewer
+  document.getElementById('s-pump').value = P.pump
+  
+  document.getElementById('v-rain').textContent  = P.rain + ' mm/h'
+  document.getElementById('v-canal').textContent = (P.canal/10).toFixed(1) + ' m'
+  document.getElementById('v-sewer').textContent = P.sewer + '%'
+  document.getElementById('v-pump').textContent  = P.pump + '%'
+  
+  if (!useRandomMode) { updateMetrics() }
+  updateDataTable()
+}
+
+function updateGridData(i, field, value) {
+  if (!useRandomMode) {
+    document.getElementById('random-toggle').checked = true
+    toggleDataSource()
+  }
+  
+  let val = Number(value)
+  if (field === 'canal') { val = val * 10 }
+  
+  if (useTimeDynamics) {
+    let factor = 1.0
+    if (field === 'rain') { factor = 1.0 + Math.sin((hour/24)*Math.PI) * 1.5 }
+    if (field === 'canal') { factor = 1.0 + Math.sin((hour/24)*Math.PI) * 0.5 }
+    if (field === 'sewer') { factor = 1.0 + Math.sin((hour/24)*Math.PI) * 0.6 }
+    if (field === 'pump') { factor = 1.0 - Math.sin((hour/24)*Math.PI) * 0.3 }
+    baseRandomData[i][field] = Math.round(val / factor)
+  } else {
+    baseRandomData[i][field] = val
+    randomData[i][field] = val
+  }
+  
+  applyTimeDynamics()
+  refreshMap()
+}
+
+function toggleDataSource() {
+  useRandomMode = document.getElementById('random-toggle').checked
+  const label = document.getElementById('data-mode-label')
+  const regenBtn = document.getElementById('btn-regen')
+  const statusLabel = document.getElementById('status-data-type')
+  
+  if (useRandomMode) {
+    label.textContent = "Using Custom Grid Data"
+    regenBtn.classList.remove('hidden')
+    statusLabel.innerHTML = '<span class="sd sd-purple"></span>Custom Grid Data'
+  } else {
+    label.textContent = "Using Global Sliders"
+    regenBtn.classList.add('hidden')
+    statusLabel.innerHTML = '<span class="sd sd-orange"></span>Simulated sensor data'
+  }
+  
+  if (useRandomMode && baseRandomData.length === 0) {
+    baseRandomData = DISTRICTS.map(() => ({rain: baseP.rain, canal: baseP.canal, sewer: baseP.sewer, pump: baseP.pump}))
+  }
+
+  applyTimeDynamics()
+  refreshMap()
+}
+
+function toggleTimeDynamics() {
+  useTimeDynamics = document.getElementById('dynamic-time-toggle').checked
+  
+  document.getElementById('s-rain').disabled = useTimeDynamics
+  document.getElementById('s-canal').disabled = useTimeDynamics
+  document.getElementById('s-sewer').disabled = useTimeDynamics
+  document.getElementById('s-pump').disabled = useTimeDynamics
+  
+  if (useTimeDynamics) {
+    hour = 0
+    updateTime()
+    baseP.rain = +document.getElementById('s-rain').value
+    baseP.canal = +document.getElementById('s-canal').value
+    baseP.sewer = +document.getElementById('s-sewer').value
+    baseP.pump = +document.getElementById('s-pump').value
+  } else {
+    baseP.rain = P.rain
+    baseP.canal = P.canal
+    baseP.sewer = P.sewer
+    baseP.pump = P.pump
+  }
+  
+  applyTimeDynamics()
+  refreshMap()
+}
+
+function updateDataTable() {
+  DISTRICTS.forEach((d, i) => {
+    let r = P.rain
+    let c = (P.canal / 10).toFixed(1)
+    let s = P.sewer
+    let p = P.pump
+
+    if (useRandomMode && randomData[i]) {
+      r = randomData[i].rain
+      c = (randomData[i].canal / 10).toFixed(1)
+      s = randomData[i].sewer
+      p = randomData[i].pump
+    }
+    
+    const rEl = document.getElementById(`t-rain-${i}`)
+    const cEl = document.getElementById(`t-canal-${i}`)
+    const sEl = document.getElementById(`t-sewer-${i}`)
+    const pEl = document.getElementById(`t-pump-${i}`)
+    const dEl = document.getElementById(`t-depth-${i}`)
+
+    if (rEl && document.activeElement !== rEl) { rEl.value = r }
+    if (cEl && document.activeElement !== cEl) { cEl.value = c }
+    if (sEl && document.activeElement !== sEl) { sEl.value = s }
+    if (pEl && document.activeElement !== pEl) { pEl.value = p }
+
+    const depth = floodDepth(d, i).toFixed(1)
+    if (dEl) {
+      dEl.textContent = depth
+      dEl.style.color = depth > 0 ? '#DC2626' : '#16A34A'
+    }
+  })
+}
+
+function switchTab(tabId) {
+  document.getElementById('btn-map').classList.remove('active')
+  document.getElementById('btn-data').classList.remove('active')
+  document.getElementById('btn-' + tabId).classList.add('active')
+
+  if (tabId === 'map') {
+    document.getElementById('map').style.display = 'block'
+    document.getElementById('data-panel').style.display = 'none'
+    map.invalidateSize()
+  } else {
+    document.getElementById('map').style.display = 'none'
+    document.getElementById('data-panel').style.display = 'block'
+    updateDataTable()
+  }
+}
+
+function updateMetrics() {
+  if (useRandomMode || useTimeDynamics) { return }
+  
+  const rn = d => (Math.random() - .5) * d * 2
+  document.getElementById('m-rain').innerHTML  = Math.round(P.rain + rn(3)) + '<span class="mc-u"> mm/h</span>'
+  document.getElementById('m-canal').innerHTML = ((P.canal/10) + rn(.05)).toFixed(1) + '<span class="mc-u"> m</span>'
+  document.getElementById('m-sewer').innerHTML = Math.min(100, Math.round(P.sewer + rn(2))) + '<span class="mc-u"> %</span>'
+  document.getElementById('m-pump').innerHTML  = Math.max(0, Math.round(P.pump + rn(1))) + '<span class="mc-u"> %</span>'
+  
+  const setD = (id, txt, cls) => {
+    const e = document.getElementById(id)
+    e.textContent = txt
+    e.className = 'mc-d ' + cls
+  }
+  
+  setD('d-rain',  P.rain > 40 ? '▲ rising' : '▼ stable',     P.rain > 40 ? 'up' : 'dn')
+  setD('d-canal', P.canal > 25 ? '▲ rising' : '— stable',    P.canal > 25 ? 'up' : 'nt')
+  setD('d-sewer', P.sewer > 60 ? '▲ high load' : '— moderate', P.sewer > 60 ? 'up' : 'nt')
+  setD('d-pump',  P.pump < 50 ? '▼ degraded' : '▲ operating', P.pump < 50 ? 'up' : 'dn')
+}
+
+function onSlider() {
+  if (useTimeDynamics) { return }
+  baseP.rain = +document.getElementById('s-rain').value
+  baseP.canal = +document.getElementById('s-canal').value
+  baseP.sewer = +document.getElementById('s-sewer').value
+  baseP.pump = +document.getElementById('s-pump').value
+  
+  if (useRandomMode) {
+     baseRandomData = DISTRICTS.map(() => ({rain: baseP.rain, canal: baseP.canal, sewer: baseP.sewer, pump: baseP.pump}))
+  }
+  
+  document.querySelectorAll('.sc').forEach(b => b.classList.remove('active'))
+  applyTimeDynamics()
+  refreshMap()
+}
+
+function setScenario(el, key) {
+  if (key === 'normal') { baseP = {rain:30, canal:18, sewer:35, pump:85} }
+  if (key === 'storm') { baseP = {rain:110, canal:32, sewer:75, pump:60} }
+  if (key === 'extreme') { baseP = {rain:185, canal:48, sewer:95, pump:30} }
+  if (key === 'replay2011') { baseP = {rain:145, canal:45, sewer:90, pump:25} }
+  
+  document.querySelectorAll('.sc').forEach(b => b.classList.remove('active'))
+  el.classList.add('active')
+  
+  baseRandomData = DISTRICTS.map(() => ({rain: baseP.rain, canal: baseP.canal, sewer: baseP.sewer, pump: baseP.pump}))
+  
+  applyTimeDynamics()
+  refreshMap()
+}
+
+function togglePlay() {
+  playing = !playing
+  const btn = document.getElementById('play-btn')
+  if (playing) {
+    btn.textContent = '⏸ Pause'
+    btn.classList.add('playing')
+    playTimer = setInterval(() => { 
+      hour = (hour + 1) % 24
+      updateTime()
+      refreshMap() 
+    }, 900)
+  } else {
+    btn.textContent = '▶ Play'
+    btn.classList.remove('playing')
+    clearInterval(playTimer)
+  }
+}
+
+function stepTime(dir){ 
+  hour = Math.max(0, Math.min(23, hour + dir))
+  updateTime()
+  refreshMap() 
+}
+
+function updateTime(){
+  document.getElementById('t-label').textContent = 'Hour ' + hour
+  document.getElementById('sim-clock').textContent = 'Hour ' + hour + ' of 24'
+  applyTimeDynamics()
+}
+
+initTable()
+initMap()
+setInterval(updateMetrics, 3000)
+
+</script>
