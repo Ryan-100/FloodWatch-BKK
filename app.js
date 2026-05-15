@@ -1,36 +1,171 @@
 // ─── State ──────────────────────────────────────────────────────────────────
 let map, weatherCache = null, predictions = null;
-let districtGeoJSON = null, districtLayer = null;
-let roadGeoJSON = null, roadLayer = null, allRoadsLayer = null;
-let roadFeatures = [];
-let pointsLayer = null, pointFeatures = [];
-let canvasRenderer = null;
+let districtGeoJSON = null;
 let currentTab = 'map';
 let spatialIndex = null;
-let districtsVisible = true, roadsVisible = true, allRoadsVisible = false, reportsVisible = true;
-let reportsLayer = null;
+let districtsVisible = true, roadsVisible = true, reportsVisible = true;
 let currentHour = 0, isArchiveMode = false, selectedPoint = null;
 const BKK = { lat: 13.7563, lon: 100.5018 };
 const LAT_STEP = 0.055556, LON_STEP = 0.066667;
 
 // ─── Init ───────────────────────────────────────────────────────────────────
 async function initMap() {
-  map = L.map('map', { center: [13.75, 100.55], zoom: 11 });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap', maxZoom: 19
-  }).addTo(map);
-  
-  canvasRenderer = L.canvas({ padding: 0.5 });
-  pointsLayer = L.layerGroup();
-  
-  await fetchDistricts();
-  await fetchRoads();
-  
-  reportsLayer = L.layerGroup().addTo(map);
-  fetchAndRenderReports();
-  setInterval(fetchAndRenderReports, 30000);
-  
-  addMapControls();
+  map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    center: [100.5018, 13.7563],
+    zoom: 12,
+    pitch: 45,
+    bearing: -10,
+    antialias: true
+  });
+
+  map.addControl(new maplibregl.NavigationControl(), 'top-left');
+
+  map.on('style.load', () => {
+    map.easeTo({ pitch: 45, bearing: -10, duration: 1000 });
+  });
+
+  map.on('load', async () => {
+    console.log('[Init] Map loaded');
+    
+    // 1. Add all sources first
+    map.addSource('roads-risk', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addSource('districts', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addSource('report-points', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+    // 2. Add 3D buildings - detect correct source name from style
+    const styleLayers = map.getStyle().layers;
+    const buildingLayer = styleLayers.find(l => l['source-layer'] === 'building');
+    const buildingSource = buildingLayer ? buildingLayer.source : 'openmaptiles';
+    map.addLayer({
+      id: '3d-buildings',
+      source: buildingSource,
+      'source-layer': 'building',
+      type: 'fill-extrusion',
+      minzoom: 14,
+      paint: {
+        'fill-extrusion-color': '#e8e0d8',
+        'fill-extrusion-height': ['coalesce', ['get', 'render_height'], ['get', 'height'], 10],
+        'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], ['get', 'min_height'], 0],
+        'fill-extrusion-opacity': 0.7
+      }
+    });
+
+    // 3. Add road risk layer
+    map.addLayer({
+      id: 'roads-risk-layer',
+      type: 'line',
+      source: 'roads-risk',
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': ['coalesce', ['get', 'color'], '#22c55e'],
+        'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 10, 3, 15, 12, 18, 24],
+        'line-opacity': 0.8,
+        'line-blur': 0.5
+      }
+    });
+
+    // 4. Add district layers
+    map.addLayer({
+      id: 'districts-fill',
+      type: 'fill',
+      source: 'districts',
+      paint: {
+        'fill-color': ['coalesce', ['get', 'color'], '#22c55e'],
+        'fill-opacity': 0.3
+      }
+    });
+    map.addLayer({
+      id: 'districts-border',
+      type: 'line',
+      source: 'districts',
+      paint: {
+        'line-color': ['coalesce', ['get', 'border_color'], '#15803d'],
+        'line-width': 1.5
+      }
+    });
+
+    // 5. Add report points layer
+    map.addLayer({
+      id: 'report-points-layer',
+      type: 'circle',
+      source: 'report-points',
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 6, 15, 14],
+        'circle-color': ['coalesce', ['get', 'color'], '#ef4444'],
+        'circle-opacity': 0.85,
+        'circle-stroke-width': 2,
+        'circle-stroke-color': 'white'
+      }
+    });
+
+    // 5b. Add risk points layer (grid points)
+    map.addSource('risk-points', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({
+      id: 'risk-points-layer',
+      type: 'circle',
+      source: 'risk-points',
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 3, 15, 8],
+        'circle-color': ['coalesce', ['get', 'color'], '#22c55e'],
+        'circle-opacity': 0.5,
+        'circle-stroke-width': 1,
+        'circle-stroke-color': 'rgba(255,255,255,0.3)'
+      }
+    });
+
+    // Hover tooltips for roads
+    map.on('mouseenter', 'roads-risk-layer', e => {
+      map.getCanvas().style.cursor = 'pointer';
+      const props = e.features[0].properties;
+      new maplibregl.Popup({ closeButton: false, closeOnClick: false })
+        .setLngLat(e.lngLat)
+        .setHTML(`<b>${props.road_name || 'Road'}</b><br>Risk: <b style="color:${props.color}">${props.risk_tier}</b><br>Score: ${props.anomaly_score}`)
+        .addTo(map);
+    });
+    map.on('mouseleave', 'roads-risk-layer', () => {
+      map.getCanvas().style.cursor = '';
+      document.querySelectorAll('.maplibregl-popup').forEach(p => p.remove());
+    });
+
+    // Hover for districts
+    map.on('mouseenter', 'districts-fill', e => {
+      const p = e.features[0].properties;
+      new maplibregl.Popup({ closeButton: false })
+        .setLngLat(e.lngLat)
+        .setHTML(`<b>${p.name}</b><br>Risk: <b>${p.risk_tier}</b><br>Score: ${p.anomaly_score}`)
+        .addTo(map);
+    });
+    map.on('mouseleave', 'districts-fill', () => {
+      document.querySelectorAll('.maplibregl-popup').forEach(p => p.remove());
+    });
+
+    // Hover for report points
+    map.on('mouseenter', 'report-points-layer', e => {
+      map.getCanvas().style.cursor = 'pointer';
+      const p = e.features[0].properties;
+      new maplibregl.Popup({ closeButton: false })
+        .setLngLat(e.lngLat)
+        .setHTML(`<b>🚨 ${p.severity}</b><br>${p.description}<br><small>${p.reliability}</small>`)
+        .addTo(map);
+    });
+    map.on('mouseleave', 'report-points-layer', () => {
+      map.getCanvas().style.cursor = '';
+      document.querySelectorAll('.maplibregl-popup').forEach(p => p.remove());
+    });
+
+    // 6. Load roads then fetch predictions
+    await loadRoadGeometry();
+    await fetchDistricts();
+    await fetchAndPredict();
+    await refreshReportMarkers();
+
+    // 7. Start auto-refresh
+    setInterval(refreshReportMarkers, 30000);
+
+    addMapControls();
+  });
 }
 
 async function fetchDistricts() {
@@ -73,96 +208,90 @@ async function fetchDistricts() {
   }
 }
 
-async function fetchRoads() {
+async function loadRoadGeometry() {
+  if (window._cachedRoadFeatures) return; // already loaded
+  console.log('[Roads] Fetching from Overpass...');
   try {
-    const statusSrc = document.getElementById('status-src');
-    if (statusSrc) statusSrc.innerHTML = `<span class="sd sd-orange"></span>Fetching road network…`;
-    
     const overpassQuery = `
       [out:json][timeout:60];
-      way["highway"~"primary|secondary|tertiary|residential|trunk|motorway"]
+      way["highway"~"primary|secondary|trunk|motorway|tertiary"]
         (13.55,100.35,13.95,100.85);
       out geom;
     `;
-    const response = await fetch('https://overpass-api.de/api/interpreter', {
+    const resp = await fetch('https://overpass.kumi.systems/api/interpreter', {
       method: 'POST',
       body: new URLSearchParams({ data: overpassQuery })
     });
-    if (!response.ok) throw new Error(`Overpass API error: ${response.status}`);
-    const data = await response.json();
-    
-    let features = [];
-    if (data.elements) {
-      data.elements.forEach(way => {
-        if (way.type === 'way' && way.geometry) {
-          const coords = way.geometry.map(node => [node.lon, node.lat]);
-          features.push({
-            type: 'Feature',
-            properties: {
-              name: way.tags && way.tags.name ? way.tags.name : 'Unnamed road',
-              highway: way.tags && way.tags.highway ? way.tags.highway : 'unknown'
-            },
-            geometry: {
-              type: 'LineString',
-              coordinates: coords
-            }
-          });
+    const data = await resp.json();
+    window._cachedRoadFeatures = data.elements
+      .filter(e => e.type === 'way' && e.geometry && e.geometry.length >= 2)
+      .map(e => ({
+        type: 'Feature',
+        properties: { road_name: e.tags?.name || e.tags?.['name:en'] || 'Road' },
+        geometry: {
+          type: 'LineString',
+          coordinates: e.geometry.map(n => [n.lon, n.lat])
         }
-      });
-    }
-    roadGeoJSON = { type: 'FeatureCollection', features };
-    
-    // Build Leaflet layers ONCE to prevent UI freezing and layer disappearance
-    roadLayer = L.layerGroup();
-    allRoadsLayer = L.layerGroup();
-    roadFeatures = [];
-    
-    const majorHighways = ['primary', 'secondary', 'trunk', 'motorway'];
-    
-    roadGeoJSON.features.forEach(feature => {
-      let midLat = 0, midLon = 0;
-      const coords = feature.geometry.coordinates;
-      if (coords && coords.length > 0) {
-        const midIndex = Math.floor(coords.length / 2);
-        midLon = coords[midIndex][0];
-        midLat = coords[midIndex][1];
-      }
-      
-      const isMajor = majorHighways.includes(feature.properties.highway);
-      
-      const pl = L.polyline(coords.map(c => [c[1], c[0]]), {
-        renderer: canvasRenderer,
-        color: '#808080', weight: isMajor ? 2 : 1, opacity: 0.5
-      });
-      
-      pl._midLat = midLat;
-      pl._midLon = midLon;
-      pl._isMajor = isMajor;
-      pl._featureName = feature.properties.name;
-      
-      if (isMajor) roadLayer.addLayer(pl);
-      else allRoadsLayer.addLayer(pl);
-      
-      roadFeatures.push(pl);
-    });
-    
-    if (roadsVisible) roadLayer.addTo(map);
-    if (allRoadsVisible) allRoadsLayer.addTo(map);
-    
-    if (statusSrc) statusSrc.innerHTML = `<span class="sd sd-orange"></span>Awaiting data`;
-    
-    // If predictions already loaded, style them immediately
-    if (predictions) {
-      console.log("Predictions already available, styling roads...");
-      renderLayers();
-    } else {
-      console.log("Predictions not yet available, roads will be styled on next update.");
-    }
-  } catch (e) {
-    console.warn('Road network fetch failed:', e);
-    const statusSrc = document.getElementById('status-src');
-    if (statusSrc) statusSrc.innerHTML = `<span class="sd sd-red"></span>Roads unavailable`;
+      }));
+    console.log(`[Roads] Loaded ${window._cachedRoadFeatures.length} road segments`);
+    // Initialize with default (safe) colors
+    updateRoadColors([]);
+  } catch(e) {
+    console.warn('[Roads] Overpass fetch failed:', e);
+    window._cachedRoadFeatures = [];
   }
+}
+
+function updateRoadColors(results) {
+  if (!window._cachedRoadFeatures || window._cachedRoadFeatures.length === 0) {
+    console.warn('[Roads] No cached road geometry yet');
+    return;
+  }
+  const index = buildSpatialIndex(results);
+  const features = window._cachedRoadFeatures.map(f => {
+    const coords = f.geometry.coordinates;
+    const mid = coords[Math.floor(coords.length / 2)];
+    const nearest = nearestGridPoint(mid[1], mid[0], index);
+    const style = nearest ? getRiskStyle(nearest.anomaly_score) : { color: '#16a34a', tier: 'Safe', opacity: 0.35 };
+    return {
+      ...f,
+      properties: {
+        ...f.properties,
+        color: style.color,
+        risk_tier: style.tier,
+        opacity: style.opacity,
+        anomaly_score: nearest?.anomaly_score?.toFixed(4) || 'N/A'
+      }
+    };
+  });
+  map.getSource('roads-risk').setData({ type: 'FeatureCollection', features });
+  console.log(`[Roads] Colored ${features.length} road segments`);
+}
+
+function updateRiskPoints(results) {
+  const features = results.map(r => {
+    const style = getRiskStyle(r.anomaly_score);
+    return {
+      type: 'Feature',
+      properties: {
+        color: style.color,
+        anomaly_score: r.anomaly_score.toFixed(4),
+        label: r.label
+      },
+      geometry: { type: 'Point', coordinates: [r.lon, r.lat] }
+    };
+  });
+  map.getSource('risk-points').setData({ type: 'FeatureCollection', features });
+  console.log(`[Predict] Updated ${features.length} risk points`);
+}
+
+function getRiskStyle(score) {
+  if (score <= -0.18) return { color: '#dc2626', tier: 'Critical', weight_low: 3.5, weight_high: 6, opacity: 0.95 }; // Deeper Red
+  if (score <= -0.13) return { color: '#ea580c', tier: 'High',     weight_low: 3,   weight_high: 5, opacity: 0.9 };  // Deeper Orange
+  if (score <= -0.05) return { color: '#fbbf24', tier: 'Moderate', weight_low: 2.5, weight_high: 4, opacity: 0.85 }; // Vivid Amber
+  if (score <= 0.05)  return { color: '#4ade80', tier: 'Low',      weight_low: 2,   weight_high: 3, opacity: 0.7 };
+  if (score <= 0.12)  return { color: '#22c55e', tier: 'Minimal',  weight_low: 1.5, weight_high: 2.5, opacity: 0.6 };
+  return                       { color: '#16a34a', tier: 'Safe',    weight_low: 1,   weight_high: 2, opacity: 0.4 };
 }
 
 function getFeatureCentroid(feature) {
@@ -181,112 +310,136 @@ function getFeatureCentroid(feature) {
   return count > 0 ? { lat: latSum / count, lon: lonSum / count } : BKK;
 }
 
-function buildSyntheticGrid() {
-  console.log('Building synthetic grid');
-  const features = [];
-  const latStart = 13.50, latEnd = 14.00;
-  const lonStart = 100.30, lonEnd = 100.90;
-  const latStep = (latEnd - latStart) / 7;
-  const lonStep = (lonEnd - lonStart) / 7;
-  const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
-  
-  for (let r = 0; r < 7; r++) {
-    for (let c = 0; c < 7; c++) {
-      const minLat = latStart + r * latStep;
-      const maxLat = minLat + latStep;
-      const minLon = lonStart + c * lonStep;
-      const maxLon = minLon + lonStep;
-      
-      features.push({
-        type: 'Feature',
-        properties: { name: `Zone ${rows[r]}${c+1}` },
-        geometry: {
-          type: 'Polygon',
-          coordinates: [[[minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat]]]
-        }
-      });
-    }
-  }
-  return { type: 'FeatureCollection', features };
+// District layer handled in initMap sources/layers
+
+
+function updateDistrictLayer(districtGeoJSON, results) {
+  const index = buildSpatialIndex(results);
+  const features = districtGeoJSON.features.map(f => {
+    const centroid = getPolygonCentroid(f.geometry.coordinates[0]);
+    const nearest = nearestGridPoint(centroid[1], centroid[0], index);
+    const style = nearest ? getRiskStyle(nearest.anomaly_score) : { color: '#22c55e', tier: 'Safe' };
+    return {
+      ...f,
+      properties: {
+        ...f.properties,
+        color: style.color,
+        border_color: style.color,
+        risk_tier: style.tier,
+        anomaly_score: nearest?.anomaly_score?.toFixed(4) || 'N/A'
+      }
+    };
+  });
+  map.getSource('districts').setData({ type: 'FeatureCollection', features });
+  console.log(`[Districts] Updated ${features.length} features`);
+}
+
+function getPolygonCentroid(coords) {
+  const lons = coords.map(c => c[0]);
+  const lats = coords.map(c => c[1]);
+  return [
+    lons.reduce((a,b) => a+b,0) / lons.length,
+    lats.reduce((a,b) => a+b,0) / lats.length
+  ];
 }
 
 function addMapControls() {
-  const ctrl = L.control({ position: 'topright' });
-  ctrl.onAdd = function() {
-    const div = L.DomUtil.create('div', 'map-toggle-ctrl');
-    div.innerHTML = `
-      <button id="tog-dist" class="map-toggle-btn active" onclick="toggleLayer('dist')">Districts</button>
-      <button id="tog-roads" class="map-toggle-btn active" onclick="toggleLayer('roads')">Roads</button>
-      <button id="tog-all-roads" class="map-toggle-btn" onclick="toggleLayer('all-roads')">All Roads</button>
-      <button id="tog-reports" class="map-toggle-btn active" onclick="toggleLayer('reports')">Reports</button>
-    `;
-    L.DomEvent.disableClickPropagation(div);
-    return div;
-  };
-  ctrl.addTo(map);
+  const ctrlContainer = document.createElement('div');
+  ctrlContainer.className = 'maplibregl-ctrl map-toggle-ctrl';
+  ctrlContainer.style.background = 'white';
+  ctrlContainer.style.padding = '5px';
+  ctrlContainer.style.borderRadius = '4px';
+  ctrlContainer.style.display = 'flex';
+  ctrlContainer.style.flexDirection = 'column';
+  ctrlContainer.style.gap = '4px';
+  ctrlContainer.style.boxShadow = '0 0 0 2px rgba(0,0,0,.1)';
+
+  const btnDist = createToggleBtn('Districts', true, () => {
+    toggleLayerVisibility('districts-fill', btnDist);
+    toggleLayerVisibility('districts-border', null);
+  });
+  const btnRoads = createToggleBtn('Roads', true, () => {
+    toggleLayerVisibility('roads-risk-layer', btnRoads);
+  });
+  const btnPoints = createToggleBtn('Grid', true, () => {
+    toggleLayerVisibility('risk-points-layer', btnPoints);
+  });
+  const btnReports = createToggleBtn('Reports', true, () => {
+    toggleLayerVisibility('report-points-layer', btnReports);
+  });
+
+  ctrlContainer.appendChild(btnDist);
+  ctrlContainer.appendChild(btnRoads);
+  ctrlContainer.appendChild(btnPoints);
+  ctrlContainer.appendChild(btnReports);
+
+  map.addControl({
+    onAdd: () => ctrlContainer,
+    onRemove: () => ctrlContainer.remove()
+  }, 'top-right');
 }
 
-function toggleLayer(type) {
-  if (type === 'dist') {
-    if (!districtLayer) return;
-    const has = map.hasLayer(districtLayer);
-    has ? map.removeLayer(districtLayer) : map.addLayer(districtLayer);
-    districtsVisible = !has;
-    const btn = document.getElementById('tog-dist');
-    btn.style.backgroundColor = districtsVisible ? '#1D4ED8' : '#ffffff';
-    btn.style.color = districtsVisible ? '#ffffff' : '#444444';
-  } else if (type === 'roads') {
-    if (!roadLayer) return;
-    const has = map.hasLayer(roadLayer);
-    if (has) {
-      map.removeLayer(roadLayer);
-    } else {
-      map.addLayer(roadLayer);
-    }
-    roadsVisible = !has;
-    const btn = document.getElementById('tog-roads');
-    btn.style.backgroundColor = roadsVisible ? '#1D4ED8' : '#ffffff';
-    btn.style.color = roadsVisible ? '#ffffff' : '#444444';
-  } else if (type === 'all-roads') {
-    if (!allRoadsLayer) return;
-    const has = map.hasLayer(allRoadsLayer);
-    has ? map.removeLayer(allRoadsLayer) : map.addLayer(allRoadsLayer);
-    allRoadsVisible = !has;
-    const btn = document.getElementById('tog-all-roads');
-    btn.style.backgroundColor = allRoadsVisible ? '#1D4ED8' : '#ffffff';
-    btn.style.color = allRoadsVisible ? '#ffffff' : '#444444';
-  } else if (type === 'reports') {
-    if (!reportsLayer) return;
-    const has = map.hasLayer(reportsLayer);
-    has ? map.removeLayer(reportsLayer) : map.addLayer(reportsLayer);
-    reportsVisible = !has;
-    const btn = document.getElementById('tog-reports');
-    btn.style.backgroundColor = reportsVisible ? '#1D4ED8' : '#ffffff';
-    btn.style.color = reportsVisible ? '#ffffff' : '#444444';
+function createToggleBtn(label, active, onClick) {
+  const btn = document.createElement('button');
+  btn.textContent = label;
+  btn.className = 'map-toggle-btn';
+  btn.style.background = active ? '#1D4ED8' : 'white';
+  btn.style.color = active ? 'white' : '#374151';
+  btn.style.border = '1px solid #ddd';
+  btn.style.padding = '4px 8px';
+  btn.style.borderRadius = '3px';
+  btn.style.fontSize = '10px';
+  btn.style.fontWeight = '600';
+  btn.style.cursor = 'pointer';
+  btn.onclick = onClick;
+  return btn;
+}
+
+function toggleLayerVisibility(layerId, btn) {
+  const vis = map.getLayoutProperty(layerId, 'visibility') || 'visible';
+  const newVis = vis === 'none' ? 'visible' : 'none';
+  map.setLayoutProperty(layerId, 'visibility', newVis);
+  if (btn) {
+    btn.style.background = newVis === 'visible' ? '#1D4ED8' : 'white';
+    btn.style.color = newVis === 'visible' ? 'white' : '#374151';
   }
 }
 
-async function fetchAndRenderReports() {
-  if (!reportsLayer) return;
+async function refreshReportMarkers() {
   try {
     const resp = await fetch('/api/reports');
-    const data = await resp.json();
-    reportsLayer.clearLayers();
+    if (!resp.ok) {
+      console.warn(`[Reports] API returned ${resp.status}, skipping.`);
+      return;
+    }
+    const reports = await resp.json();
+    const sevColors = { ankle_deep:'#facc15', knee_deep:'#f97316', vehicle_submerged:'#ef4444', road_blocked:'#7c3aed' };
     
-    // Only show verified + pending/dispatched reports on main map
-    data.filter(r => r.reliability === 'verified' && r.status !== 'spam' && r.status !== 'resolved').forEach(r => {
-      const marker = L.circleMarker([r.lat, r.lon], {
-        radius: 6,
-        fillColor: '#ef4444',
-        color: '#fff',
-        weight: 1,
-        fillOpacity: 0.8,
-        className: 'citizen-report-dot'
-      });
-      marker.bindTooltip(`Citizen Report: ${r.severity.replace('_',' ')}`, { sticky: true });
-      marker.addTo(reportsLayer);
-    });
-  } catch (e) { console.warn("Failed to fetch reports for main map", e); }
+    const dateInput = document.getElementById('date-input');
+    const selectedDate = dateInput ? dateInput.value : '';
+
+    const features = reports
+      .filter(r => {
+        if (r.reliability === 'likely_spam' || r.status === 'spam' || r.status === 'resolved' || !r.lat || !r.lon) return false;
+        if (selectedDate && r.timestamp) return r.timestamp.startsWith(selectedDate);
+        return true;
+      })
+      .map(r => ({
+        type: 'Feature',
+        properties: {
+          color: sevColors[r.severity] || '#9ca3af',
+          severity: r.severity?.replace(/_/g,' ') || 'Unknown',
+          description: r.description || '',
+          reliability: r.reliability,
+          id: r.id
+        },
+        geometry: { type: 'Point', coordinates: [r.lon, r.lat] }
+      }));
+    map.getSource('report-points').setData({ type: 'FeatureCollection', features });
+    console.log(`[Reports] Loaded ${features.length} markers`);
+  } catch(e) {
+    console.warn('[Reports] Failed to load:', e);
+  }
 }
 
 function setToday() {
@@ -400,6 +553,7 @@ async function predict(weather) {
   });
   if (!resp.ok) throw new Error(`Predict API error: ${resp.status}`);
   const results = (await resp.json()).results;
+  console.log(`[Predict] Got ${results.length} results`);
   spatialIndex = buildSpatialIndex(results);
   return results;
 }
@@ -416,6 +570,7 @@ async function fetchAndPredict() {
     const dateStr = document.getElementById('date-input').value;
     if (!dateStr) { alert('Please select a date'); return; }
 
+    console.log(`[Predict] Fetching weather for ${dateStr}`);
     weatherCache = await fetchWeather(dateStr);
     if (weatherCache.time.length === 0) {
       alert('No data returned for this date. Try a different date.');
@@ -517,155 +672,19 @@ function getRiskColor(tier) {
 }
 
 // ─── Map Rendering ──────────────────────────────────────────────────────────
-function renderLayers() {
-  if (districtLayer) map.removeLayer(districtLayer);
+async function renderLayers() {
+  if (!predictions) return;
 
   // 1. Districts
   if (districtGeoJSON) {
-    const h = Math.min(currentHour, weatherCache.time.length - 1);
-    const currentRain = weatherCache.precipitation[h].toFixed(1);
-    
-    districtGeoJSON.features.forEach(feature => {
-      let centroid = BKK;
-      if (feature.properties.centroid) centroid = feature.properties.centroid;
-      else if (feature.geometry) centroid = getFeatureCentroid(feature);
-      
-      const p = nearestGridPoint(centroid.lat, centroid.lon, predictions);
-      feature.properties.label = p.label;
-      feature.properties.anomaly_score = p.anomaly_score;
-      feature.properties.threshold = p.threshold;
-      feature.properties.rainfall = currentRain;
-      feature.properties.flood_confidence_pct = p.flood_confidence_pct;
-      
-      const riskInfo = getRiskFromScore(p.anomaly_score);
-      feature.properties.riskValue = riskInfo.risk;
-      feature.properties.riskTier = riskInfo.tier;
-    });
-
-    districtLayer = L.geoJSON(districtGeoJSON, {
-      style: (feature) => {
-        const rc = getRiskColor(feature.properties.riskTier);
-        return {
-          fillColor: rc.fill,
-          fillOpacity: 0.45,
-          color: rc.border,
-          weight: 1.5,
-          className: 'district-polygon'
-        };
-      },
-      onEachFeature: (feature, layer) => {
-        layer.on({
-          mouseover: function(e) {
-            e.target.setStyle({ weight: 3, color: '#ffffff' });
-            e.target.bindTooltip(`
-              <strong>${feature.properties.name}</strong><br>
-              Risk Level: ${feature.properties.riskTier}<br>
-              Risk Score: ${(feature.properties.riskValue * 100).toFixed(1)}%<br>
-              Anomaly Score: ${feature.properties.anomaly_score?.toFixed(4)}<br>
-              Rainfall: ${feature.properties.rainfall} mm
-            `, { sticky: true }).openTooltip();
-          },
-          mouseout: function(e) {
-            districtLayer.resetStyle(e.target);
-            e.target.closeTooltip();
-          },
-          click: function(e) {
-            // update sidebar Selected Point panel with this district's data
-            document.getElementById('point-details').classList.remove('hidden');
-            document.getElementById('pt-pos').textContent = feature.properties.name;
-            document.getElementById('pt-score').textContent = feature.properties.anomaly_score?.toFixed(6);
-            document.getElementById('pt-thresh').textContent = feature.properties.threshold?.toFixed(6);
-            document.getElementById('pt-pred').textContent = feature.properties.label;
-            document.getElementById('pt-pred').style.color = feature.properties.label === 'FLOOD' ? '#ef4444' : '#22c55e';
-            const rc = getRiskColor(feature.properties.riskTier);
-            document.getElementById('pt-risk').innerHTML = `<span style="color:${rc.fill}; font-weight:bold">${feature.properties.riskTier}</span> (${(feature.properties.riskValue * 100).toFixed(1)}%)`;
-            const bar = document.getElementById('pt-bar');
-            bar.style.width = feature.properties.flood_confidence_pct + '%';
-            bar.style.background = feature.properties.label === 'FLOOD' ? '#ef4444' : '#22c55e';
-          }
-        });
-      }
-    });
-    if (districtsVisible) districtLayer.addTo(map);
+    updateDistrictLayer(districtGeoJSON, predictions);
   }
 
-  // 2. Roads (fast update via setStyle)
-  if (roadFeatures && roadFeatures.length > 0 && predictions) {
-    const roadColors = {
-      'Critical': { color: '#ef4444', weight: 3, opacity: 0.85 },
-      'High':     { color: '#f97316', weight: 2.5, opacity: 0.80 },
-      'Moderate': { color: '#facc15', weight: 2, opacity: 0.75 },
-      'Low':      { color: '#86efac', weight: 1.5, opacity: 0.60 },
-      'Minimal':  { color: '#22c55e', weight: 1.5, opacity: 0.50 },
-      'Safe':     { color: '#16a34a', weight: 1, opacity: 0.40 },
-    };
-    
-    roadFeatures.forEach(pl => {
-      const nearest = nearestGridPoint(pl._midLat, pl._midLon, predictions);
-      const riskInfo = getRiskFromScore(nearest.anomaly_score);
-      const rc = roadColors[riskInfo.tier] || roadColors['Safe'];
-      
-      pl.setStyle({
-        color: rc.color,
-        weight: pl._isMajor ? rc.weight : Math.max(1, rc.weight - 0.5),
-        opacity: rc.opacity
-      });
-      
-      const tooltipHtml = `
-        <strong>${pl._featureName}</strong><br>
-        Risk Tier: ${riskInfo.tier}<br>
-        Anomaly Score: ${nearest.anomaly_score.toFixed(4)}
-      `;
-      if (pl.getTooltip()) {
-        pl.setTooltipContent(tooltipHtml);
-      } else {
-        pl.bindTooltip(tooltipHtml, { sticky: true });
-      }
-    });
-    console.log(`Styled ${roadFeatures.length} roads.`);
-  }
+  // 2. Roads
+  updateRoadColors(predictions);
 
   // 3. Risk Points (Dots)
-  if (predictions) {
-    if (pointFeatures.length === 0) {
-      predictions.forEach((p, i) => {
-        const marker = L.circleMarker([p.lat, p.lon], { renderer: canvasRenderer });
-        marker._origIndex = i;
-        marker.on('click', (e) => {
-          selectedPoint = e.target._origIndex;
-          updatePointDetails(e.target._origIndex);
-        });
-        pointsLayer.addLayer(marker);
-        pointFeatures.push(marker);
-      });
-    }
-
-    pointFeatures.forEach(marker => {
-      const p = predictions[marker._origIndex];
-      const riskInfo = getRiskFromScore(p.anomaly_score);
-      const rc = getRiskColor(riskInfo.tier);
-      const radius = 2 + (p.flood_confidence_pct / 100) * 3;
-      
-      marker.setStyle({
-        radius: radius,
-        fillColor: rc.fill,
-        color: rc.border,
-        weight: 1,
-        fillOpacity: 0.8
-      });
-      
-      marker.bindTooltip(`
-        <strong>Grid Point</strong><br>
-        Risk Level: ${riskInfo.tier}<br>
-        Confidence: ${p.flood_confidence_pct.toFixed(1)}%<br>
-        Prediction: ${p.label}<br>
-        Anomaly Score: ${p.anomaly_score.toFixed(4)}<br>
-        Elevation: ${p.elevation_m} m<br>
-        Canal Dist: ${p.dist_to_canal_m.toFixed(0)} m<br>
-        Lat: ${p.lat.toFixed(4)}, Lon: ${p.lon.toFixed(4)}
-      `, { sticky: true });
-    });
-  }
+  updateRiskPoints(predictions);
 }
 
 function buildSpatialIndex(results) {
@@ -677,22 +696,15 @@ function buildSpatialIndex(results) {
   return index;
 }
 
-function nearestGridPoint(lat, lon, results) {
-  // Check the 9 surrounding cells
+function nearestGridPoint(lat, lon, index) {
+  if (!index) return null;
+  // Check the 25 surrounding cells (+/- 2)
   let best = null, bestDist = Infinity;
-  for (let dlat = -1; dlat <= 1; dlat++) {
-    for (let dlon = -1; dlon <= 1; dlon++) {
+  for (let dlat = -2; dlat <= 2; dlat++) {
+    for (let dlon = -2; dlon <= 2; dlon++) {
       const key = `${Math.floor(lat * 200) + dlat},${Math.floor(lon * 200) + dlon}`;
-      const r = spatialIndex ? spatialIndex[key] : null;
+      const r = index[key];
       if (!r) continue;
-      const d = Math.hypot(r.lat - lat, r.lon - lon);
-      if (d < bestDist) { bestDist = d; best = r; }
-    }
-  }
-  
-  if (!best) {
-    // Fallback to linear search
-    for (const r of results) {
       const d = Math.hypot(r.lat - lat, r.lon - lon);
       if (d < bestDist) { bestDist = d; best = r; }
     }
@@ -790,7 +802,7 @@ function switchTab(tabId) {
   document.getElementById('map').style.display = isMapVisible ? 'block' : 'none';
   document.getElementById('data-panel').style.display = tabId === 'data' ? 'block' : 'none';
   
-  if (isMapVisible) map.invalidateSize();
+  if (isMapVisible) map.resize();
   
   if (tabId === 'points') {
     document.getElementById('map').classList.add('points-tab-active');
@@ -798,13 +810,8 @@ function switchTab(tabId) {
     document.getElementById('map').classList.remove('points-tab-active');
   }
   
-  if (pointsLayer) {
-    if (tabId === 'points') {
-      if (!map.hasLayer(pointsLayer)) map.addLayer(pointsLayer);
-    } else {
-      if (map.hasLayer(pointsLayer)) map.removeLayer(pointsLayer);
-    }
-  }
+  // Points tab is now handled by the roads/districts layer updates 
+  // or can be added as a separate MapLibre layer.
 }
 
 // ─── REPORT DIALOG ──────────────────────────────────────────────
@@ -819,30 +826,46 @@ function openReportDialog() {
   // Init mini map inside dialog
   setTimeout(() => {
     if (reportMap) { reportMap.remove(); reportMap = null; }
-    reportMap = L.map('report-map').setView([13.7563, 100.5018], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(reportMap);
+    reportMap = new maplibregl.Map({
+      container: 'report-map',
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      center: [100.5018, 13.7563],
+      zoom: 12
+    });
+    
+    let marker;
+    
+    const setPos = (lng, lat) => {
+      reportLat = lat;
+      reportLon = lng;
+      document.getElementById('location-status').textContent = `📍 ${reportLat.toFixed(5)}, ${reportLon.toFixed(5)}`;
+      if (!marker) {
+        marker = new maplibregl.Marker({ draggable: true })
+          .setLngLat([lng, lat])
+          .addTo(reportMap);
+        marker.on('dragend', () => {
+          const lngLat = marker.getLngLat();
+          reportLat = lngLat.lat;
+          reportLon = lngLat.lng;
+          document.getElementById('location-status').textContent = `📍 ${reportLat.toFixed(5)}, ${reportLon.toFixed(5)}`;
+        });
+      } else {
+        marker.setLngLat([lng, lat]);
+      }
+    };
+
     // Try GPS
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(pos => {
-        reportLat = pos.coords.latitude;
-        reportLon = pos.coords.longitude;
-        reportMap.setView([reportLat, reportLon], 15);
-        const marker = L.marker([reportLat, reportLon], { draggable: true }).addTo(reportMap);
-        marker.on('dragend', e => {
-          reportLat = e.target.getLatLng().lat;
-          reportLon = e.target.getLatLng().lng;
-        });
-        document.getElementById('location-status').textContent = `📍 ${reportLat.toFixed(5)}, ${reportLon.toFixed(5)}`;
+        setPos(pos.coords.longitude, pos.coords.latitude);
+        reportMap.setCenter([pos.coords.longitude, pos.coords.latitude]);
+        reportMap.setZoom(15);
       }, () => {
-        reportLat = 13.7563; reportLon = 100.5018;
+        setPos(100.5018, 13.7563);
         document.getElementById('location-status').textContent = '⚠ GPS unavailable — drag pin to your location';
-        const marker = L.marker([reportLat, reportLon], { draggable: true }).addTo(reportMap);
-        marker.on('dragend', e => {
-          reportLat = e.target.getLatLng().lat;
-          reportLon = e.target.getLatLng().lng;
-          document.getElementById('location-status').textContent = `📍 ${reportLat.toFixed(5)}, ${reportLon.toFixed(5)}`;
-        });
       });
+    } else {
+      setPos(100.5018, 13.7563);
     }
   }, 100);
 }
@@ -1016,60 +1039,16 @@ function adminSelectReport(id) {
   const r = allReports.find(x => x.id === id);
   if (!r || !r.lat || !r.lon) return;
   closeAdminPanel();
-  map.flyTo([r.lat, r.lon], 15);
+  map.flyTo({ center: [r.lon, r.lat], zoom: 15 });
 }
 
-// ─── REPORT MARKERS ON MAIN MAP ─────────────────────────────────
-let reportMarkerLayer = L.layerGroup();
+// reportMarkerLayer and reportMarkers are no longer needed as reports are handled via GeoJSON layers.
 
-async function refreshReportMarkers() {
-  if (!map) return;
-  if (!map.hasLayer(reportMarkerLayer)) reportMarkerLayer.addTo(map);
-  
-  const dateInput = document.getElementById('date-input');
-  const selectedDate = dateInput ? dateInput.value : '';
-  
-  reportMarkerLayer.clearLayers();
-  const resp = await fetch('/api/reports');
-  const reports = await resp.json();
-  const sevColors = { ankle_deep:'#facc15', knee_deep:'#f97316', vehicle_submerged:'#ef4444', road_blocked:'#7c3aed' };
-  
-  reports.filter(r => {
-    // Basic status filters
-    if (r.reliability === 'likely_spam' || r.status === 'spam' || r.status === 'resolved') return false;
-    
-    // Date filter: only show reports from the selected date
-    if (selectedDate && r.timestamp) {
-      return r.timestamp.startsWith(selectedDate);
-    }
-    return true;
-  }).forEach(r => {
-    if (!r.lat || !r.lon) return;
-    const color = sevColors[r.severity] || '#9ca3af';
-    const size = r.severity === 'vehicle_submerged' || r.severity === 'road_blocked' ? 20 : r.severity === 'knee_deep' ? 16 : 12;
-    const icon = L.divIcon({
-      className: '',
-      html: `<div style="position:relative;width:${size}px;height:${size}px">
-        <div style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:0.3;animation:pulse-ring 1.5s ease-out infinite"></div>
-        <div style="position:absolute;inset:3px;border-radius:50%;background:${color}"></div>
-      </div>`,
-      iconSize: [size, size], iconAnchor: [size/2, size/2]
-    });
-    L.marker([r.lat, r.lon], { icon })
-      .bindTooltip(`<b>${r.severity?.replace('_',' ')}</b><br>${r.description || 'No description'}<br><small>${r.reliability}</small>`)
-      .addTo(reportMarkerLayer);
-  });
-}
-
-// Refresh report markers every 30 seconds
-setInterval(refreshReportMarkers, 30000);
 
 // ─── Boot ───────────────────────────────────────────────────────────────────
 async function boot() {
   await initMap();
   setToday();
-  fetchAndPredict();
-  refreshReportMarkers();
 }
 
 boot();
